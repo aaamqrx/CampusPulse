@@ -53,6 +53,7 @@
 - **旧凭据绑定离线检查通过**：新增服务存储测试后运行同一命令，退出码 0，四项目 Release 构建 0 警告、0 错误，16/16 项模拟与临时目录存储检查通过。假数据测试确认旧配置加载时自动重连关闭、旧协议版本凭据不再读取，且新版凭据须同时匹配账号、运营商及门户地址。证据：`src/CampusPulse.Service/SecureStore.cs`、`tests/CampusPulse.Tests/Program.cs` 与本次命令输出。边界：临时目录使用假密码；没有系统服务身份、ACL、真实密码或 GUI 原生交互验收。
 - **新版 WPF 演示启动：通过**。以 `--smoke-test` 启动当前构建的 App DLL，2 秒后进程 `Responding=True`，取得非零主窗口句柄与“CampusPulse · 校园网自动连接（演示，未联网）”标题；仅停止本次启动的进程。该模式没有连接服务或校园网络。边界：未逐项点击新控件、保存设置或检查视觉排版，不能作为正式界面和后台联动通过证据。
 - **公开源码暂存检查**：按路径白名单暂存 19 个源码、测试、文档文件，`git diff --cached --check` 无空白错误，暂存路径未含 `.local/`、`.tools/`、`artifacts/`、构建输出或凭据文件。首次明显敏感模式扫描因 Git 参数写法错误未完成；修正后宽泛的 `user_password=` 规则仅命中离线测试中明确写出的 `dummy` 编码断言。单独复核该行后，私钥、GitHub/OpenAI 令牌模式和路径检查通过。模式扫描不能证明绝对无敏感数据，发布前仍需逐项审查暂存内容。
+- **源码推送与回读：通过**。将源码里程碑 `8d678d0e5152249c1ee1c97fda547c3300418003` 推送到公开仓库 `aaamqrx/CampusPulse` 的 `main`；`git ls-remote origin refs/heads/main` 返回相同提交，GitHub 连接器回读新增 `src/CampusPulse.Core/PortalEndpoint.cs` 成功。没有上传 `.local/`、`.tools/`、`artifacts/` 或安装包；没有创建 Release。本条只证明源码公开，不证明系统功能或真实校园认证通过。
 
 ## 后续记录格式
 

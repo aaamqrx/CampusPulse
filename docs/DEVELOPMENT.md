@@ -304,7 +304,7 @@ JSON 写入采用同目录临时文件与原子替换，临时文件继承同样
 
 已存在：Core 认证与网络路径代码、Service 后台与本机受限管道、WPF 界面、运营商选择、自填私有 IPv4 门户地址、16 项模拟离线测试及构建脚本。2026-09-27 当前代码通过 Release 构建和模拟测试；旧代码曾完成自包含发布与安装包编译，本轮未重新打包。服务尚未以 Windows 服务身份运行验证；本机安装器启动尝试停滞，未成功安装。真实校园认证、跨夜恢复和安装生命周期未验证。当前代码属于预览实现。
 
-本地 SDK 10.0.203 已验证可用；`scripts/check-dev.ps1` 已完成无打包源码构建和 16 项模拟测试。公开源码仓库 [`aaamqrx/CampusPulse`](https://github.com/aaamqrx/CampusPulse) 已创建并回读；本轮修改尚未推送，Releases 尚未上传。
+本地 SDK 10.0.203 已验证可用；`scripts/check-dev.ps1` 已完成无打包源码构建和 16 项模拟测试。公开源码仓库 [`aaamqrx/CampusPulse`](https://github.com/aaamqrx/CampusPulse) 已创建；本轮源码提交 `8d678d0` 已推送并回读，Releases 尚未上传。
 
 ## 12. 设计依据
 
