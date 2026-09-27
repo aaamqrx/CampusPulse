@@ -1,0 +1,9 @@
+---
+description: CampusPulse AI handoff and evidence-based development
+alwaysApply: true
+---
+
+Read repository `AGENTS.md` and `docs/HANDOFF.md` before changing this project.
+Follow the latest user instruction, then the documented product decisions.
+Keep HANDOFF, VALIDATION-LOG and README synchronized with actual implementation and evidence.
+Do not treat scaffold files, mocked results, or written plans as completed product validation.

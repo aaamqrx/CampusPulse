@@ -1,0 +1,129 @@
+<Window x:Class="CampusPulse.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CampusPulse · 校园网自动连接" Width="1080" Height="850"
+        MinWidth="900" MinHeight="680" Background="#F3F7F9"
+        FontFamily="Microsoft YaHei UI" FontSize="14"
+        WindowStartupLocation="CenterScreen" Closing="Window_Closing">
+    <DockPanel Margin="26,22,26,18">
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="CampusPulse" FontSize="27" FontWeight="Bold" />
+                <TextBlock Text="校园网恢复后，自动连接" Foreground="{StaticResource Muted}" Margin="0,4,0,0" />
+            </StackPanel>
+            <Border Grid.Column="1" Background="#E4EEF0" CornerRadius="12" Padding="12,6" VerticalAlignment="Center">
+                <TextBlock x:Name="VersionText" FontSize="12" Foreground="{StaticResource Accent}" />
+            </Border>
+        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Margin="2,12,0,0" Style="{StaticResource Description}"
+                   Text="关闭窗口会收起到托盘；退出界面后后台继续运行。停止后台会同时结束自动重连和防睡眠。" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <Border x:Name="DemoBanner" Visibility="Collapsed" Padding="14,10" Background="#FFF2CB" CornerRadius="8" Margin="0,0,0,14">
+                    <TextBlock Text="界面演示模式 · 以下为模拟数据，未连接后台、未检测网络、未提交认证。" TextWrapping="Wrap" Foreground="#77551C" />
+                </Border>
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.06*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="连接状态" Style="{StaticResource SectionTitle}" />
+                                <Border x:Name="StateBadge" Background="#E8EFF4" CornerRadius="9" Padding="14,11" Margin="0,0,0,12">
+                                    <TextBlock x:Name="StateText" Text="正在连接后台…" FontSize="23" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                </Border>
+                                <TextBlock x:Name="StateDetail" Text="读取保存的设置与当前状态" TextWrapping="Wrap" LineHeight="22" Margin="0,0,0,18" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                    <TextBlock Text="后台服务" Foreground="{StaticResource Muted}" Margin="0,0,0,11" />
+                                    <TextBlock x:Name="ServiceStateText" Grid.Column="1" Text="正在读取" />
+                                    <TextBlock Grid.Row="1" Text="最近检查" Foreground="{StaticResource Muted}" Margin="0,0,0,11" />
+                                    <TextBlock x:Name="LastCheckText" Grid.Row="1" Grid.Column="1" Text="—" />
+                                    <TextBlock Grid.Row="2" Text="公网验证成功" Foreground="{StaticResource Muted}" Margin="0,0,0,11" />
+                                    <TextBlock x:Name="LastSuccessText" Grid.Row="2" Grid.Column="1" Text="尚无记录" />
+                                    <TextBlock Grid.Row="3" Text="下次检查" Foreground="{StaticResource Muted}" Margin="0,0,0,11" />
+                                    <TextBlock x:Name="NextCheckText" Grid.Row="3" Grid.Column="1" Text="—" />
+                                    <TextBlock Grid.Row="4" Text="实际开机自启" Foreground="{StaticResource Muted}" Margin="0,0,0,11" />
+                                    <TextBlock x:Name="ActualAutostartText" Grid.Row="4" Grid.Column="1" Text="尚未读取" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Row="5" Text="防睡眠状态" Foreground="{StaticResource Muted}" />
+                                    <TextBlock x:Name="AwakeText" Grid.Row="5" Grid.Column="1" Text="尚未读取" TextWrapping="Wrap" />
+                                </Grid>
+                                <TextBlock x:Name="BlockedText" Visibility="Collapsed" Foreground="#9B451A" TextWrapping="Wrap" Margin="0,15,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="操作" Style="{StaticResource SectionTitle}" />
+                                <WrapPanel>
+                                    <Button x:Name="CheckButton" Content="立即检测" Click="Check_Click" ToolTip="只检查网络状态，不提交账号密码" />
+                                    <Button x:Name="ReconnectButton" Content="立即重连" Click="Reconnect_Click" ToolTip="使用已保存配置，按需要尝试一次认证" />
+                                    <Button x:Name="PauseButton" Content="暂停自动重连" Click="Pause_Click" />
+                                </WrapPanel>
+                                <TextBlock Style="{StaticResource Description}" Text="立即检测不会提交密码；立即重连使用已保存配置按需认证一次。" Margin="0,0,0,14" />
+                                <Separator Background="#E5ECF0" Margin="0,0,0,13" />
+                                <WrapPanel>
+                                    <Button x:Name="StartServiceButton" Content="启动后台服务" Click="StartService_Click" />
+                                    <Button x:Name="StopServiceButton" Content="停止后台服务" Click="StopService_Click" />
+                                    <Button x:Name="RefreshButton" Content="刷新状态" Click="Refresh_Click" />
+                                </WrapPanel>
+                                <TextBlock Style="{StaticResource Description}" Text="手动启动不改变开机自启选项。停止后台后，自动重连和防睡眠都会结束。" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                        <StackPanel>
+                            <TextBlock Text="校园网设置" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="校园电信 · Dr.COM" FontWeight="SemiBold" />
+                            <TextBlock Text="10.62.164.14 · 仅支持当前校园认证配置" Style="{StaticResource Description}" Margin="0,5,0,18" />
+                            <StackPanel x:Name="SettingsForm">
+                                <Label Content="校园网账号" Target="{Binding ElementName=UsernameBox}" Padding="0" Margin="0,0,0,6" />
+                                <TextBox x:Name="UsernameBox" MaxLength="128" TextChanged="FieldChanged" AutomationProperties.Name="校园网账号" />
+                                <TextBlock Style="{StaticResource Description}" Text="填写基础账号，或以 @dx 结尾的电信账号。" Margin="0,5,0,13" />
+                                <Label Content="校园网密码" Target="{Binding ElementName=PasswordInput}" Padding="0" Margin="0,0,0,6" />
+                                <PasswordBox x:Name="PasswordInput" MaxLength="256" PasswordChanged="FieldChanged" AutomationProperties.Name="校园网密码" />
+                                <TextBlock x:Name="PasswordHint" Style="{StaticResource Description}" Text="尚未保存密码。密码只在本机受保护保存。" Margin="0,5,0,17" />
+                                <CheckBox x:Name="StartWithWindowsBox" Content="开机自动运行后台" Checked="FieldChanged" Unchecked="FieldChanged" />
+                                <TextBlock Style="{StaticResource Description}" Text="电脑重启后自动运行，无需进入桌面；不会自动弹出本窗口。" Margin="20,0,0,13" />
+                                <CheckBox x:Name="EnabledBox" Content="自动重连校园网" Checked="FieldChanged" Unchecked="FieldChanged" />
+                                <TextBlock Style="{StaticResource Description}" Text="持续检查网络，恢复供网后按需登录；暂停不关闭防睡眠。" Margin="20,0,0,13" />
+                                <CheckBox x:Name="UnattendedBox" Content="插电无人值守模式" Checked="FieldChanged" Unchecked="FieldChanged" />
+                                <TextBlock Style="{StaticResource Description}" Text="后台运行且插电时防止空闲睡眠，仍可息屏和锁屏。" Margin="20,0,0,15" />
+                            </StackPanel>
+                            <TextBlock x:Name="UnsavedText" Style="{StaticResource Description}" MinHeight="36" Margin="0,0,0,8" Text="正在读取已保存设置…" />
+                            <WrapPanel>
+                                <Button x:Name="SaveButton" Content="保存设置" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
+                                <Button x:Name="DeleteButton" Content="清除已保存凭据" Click="Delete_Click" />
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Description}" Text="学校认证接口使用 HTTP。软件不会上传账号密码到 GitHub；本机保存不改变学校的传输方式。" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <Border x:Name="FeedbackBorder" Visibility="Collapsed" CornerRadius="8" Padding="14,10" Background="#E4F0EE" Margin="0,16,0,0">
+                    <TextBlock x:Name="FeedbackText" TextWrapping="Wrap" />
+                </Border>
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="最近事件" Style="{StaticResource SectionTitle}" />
+                            <Button x:Name="CopyEventsButton" Content="复制事件" HorizontalAlignment="Right" Padding="10,4" MinHeight="28" Click="CopyEvents_Click" Margin="0,0,0,10" />
+                        </Grid>
+                        <TextBlock x:Name="NoEventsText" Text="暂无事件。仅显示脱敏状态记录，不包含密码或认证地址参数。" Style="{StaticResource Description}" />
+                        <ListBox x:Name="EventsList" MaxHeight="200" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0,5" /></Style></ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="132" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding TimeText}" Foreground="{StaticResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

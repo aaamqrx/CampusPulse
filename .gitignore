@@ -1,0 +1,16 @@
+.tools/
+.local/
+artifacts/
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.pfx
+*.p12
+*.key
+*.log
+appsettings.local.json
+credentials*
+.env*
+!.env.example

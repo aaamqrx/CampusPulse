@@ -1,0 +1,132 @@
+using System.Security.AccessControl;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using System.Text.Json;
+using CampusPulse.Core;
+
+namespace CampusPulse.Service;
+
+internal sealed record StoredCredential(string Username, string Password);
+internal sealed record EventHistory(DateTimeOffset? LastSuccess, List<StatusEntry> Entries);
+
+internal sealed class SecureStore
+{
+    private readonly string directory;
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CampusPulse");
+    public SecureStore(string? directory = null) => this.directory = directory ?? DefaultDirectory;
+
+    public void Initialize()
+    {
+        Directory.CreateDirectory(directory);
+        if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("数据目录不能是链接。");
+        var acl = new DirectorySecurity();
+        acl.SetAccessRuleProtection(true, false);
+        foreach (var sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid, null), FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        new DirectoryInfo(directory).SetAccessControl(acl);
+        foreach (var name in new[] { "settings.json", "credentials.dat", "events.json" })
+        {
+            string path = SafePath(name);
+            if (!File.Exists(path)) continue;
+            var fileAcl = new FileSecurity();
+            fileAcl.SetAccessRuleProtection(true, false);
+            foreach (var sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+                fileAcl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid, null), FileSystemRights.FullControl, AccessControlType.Allow));
+            new FileInfo(path).SetAccessControl(fileAcl);
+        }
+    }
+
+    private string SafePath(string name)
+    {
+        var path = Path.Combine(directory, name);
+        if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("数据文件不能是链接。");
+        return path;
+    }
+
+    public CampusSettings LoadSettings()
+    {
+        var path = SafePath("settings.json");
+        if (!File.Exists(path)) return new();
+        if (new FileInfo(path).Length > 16384) throw new InvalidDataException("配置过大。");
+        var settings = JsonSerializer.Deserialize<CampusSettings>(File.ReadAllText(path)) ?? throw new InvalidDataException("配置为空。");
+        if (settings.ConfigVersion != 1 || settings.Carrier != "telecom" || settings.Username.Length > 128)
+            throw new InvalidDataException("不支持的配置格式。");
+        return settings with { OnlineCheckSeconds = Math.Clamp(settings.OnlineCheckSeconds, 30, 3600) };
+    }
+
+    public StoredCredential? LoadCredential(string username)
+    {
+        var path = SafePath("credentials.dat");
+        if (!File.Exists(path)) return null;
+        if (new FileInfo(path).Length > 32768) throw new InvalidDataException("凭据过大。");
+        byte[] clear = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.LocalMachine);
+        try
+        {
+            var value = JsonSerializer.Deserialize<StoredCredential>(clear);
+            return value is not null && value.Username == username && value.Password.Length is > 0 and <= 256 ? value : null;
+        }
+        finally { CryptographicOperations.ZeroMemory(clear); }
+    }
+
+    public void SaveSettings(CampusSettings settings) => AtomicWrite("settings.json", JsonSerializer.SerializeToUtf8Bytes(settings, Json));
+
+    public void SaveConfiguration(CampusSettings settings, StoredCredential? credential, bool deleteCredential = false)
+    {
+        var oldSettings = ReadOptional("settings.json");
+        var oldCredential = ReadOptional("credentials.dat");
+        try
+        {
+            if (deleteCredential) File.Delete(SafePath("credentials.dat"));
+            else if (credential is not null)
+            {
+                byte[] clear = JsonSerializer.SerializeToUtf8Bytes(credential);
+                try { AtomicWrite("credentials.dat", ProtectedData.Protect(clear, null, DataProtectionScope.LocalMachine)); }
+                finally { CryptographicOperations.ZeroMemory(clear); }
+            }
+            SaveSettings(settings);
+        }
+        catch
+        {
+            Restore("settings.json", oldSettings);
+            Restore("credentials.dat", oldCredential);
+            throw;
+        }
+    }
+
+    public EventHistory LoadHistory()
+    {
+        var path = SafePath("events.json");
+        if (!File.Exists(path) || new FileInfo(path).Length > 131072) return new(null, []);
+        try { return JsonSerializer.Deserialize<EventHistory>(File.ReadAllText(path)) ?? new(null, []); }
+        catch (JsonException) { return new(null, []); }
+    }
+
+    public void SaveHistory(DateTimeOffset? lastSuccess, IEnumerable<StatusEntry> events) =>
+        AtomicWrite("events.json", JsonSerializer.SerializeToUtf8Bytes(new EventHistory(lastSuccess,
+            events.Where(x => x.Time > DateTimeOffset.UtcNow.AddDays(-7)).TakeLast(80).ToList()), Json));
+
+    private byte[]? ReadOptional(string name) => File.Exists(SafePath(name)) ? File.ReadAllBytes(SafePath(name)) : null;
+    private void Restore(string name, byte[]? bytes)
+    {
+        if (bytes is null) File.Delete(SafePath(name));
+        else AtomicWrite(name, bytes);
+    }
+
+    private void AtomicWrite(string name, byte[] bytes)
+    {
+        string destination = SafePath(name);
+        string temporary = Path.Combine(directory, $"{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            { file.Write(bytes); file.Flush(true); }
+            File.Move(temporary, destination, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+}
