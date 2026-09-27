@@ -113,7 +113,7 @@ public partial class MainWindow : Window
         _connected = true;
         StateText.Text = DescribeConnection(snapshot.State);
         StateDetail.Text = snapshot.Message;
-        StateBadge.Background = Brush(snapshot.State == ConnectionState.Online ? "#DEF0E9"
+        StateBadge.Background = Brush(snapshot.State is ConnectionState.Online or ConnectionState.IntranetOnline ? "#DEF0E9"
             : snapshot.State is ConnectionState.AuthenticationRejected or ConnectionState.PortalUnavailable ? "#FFF0DF" : "#E8EFF4");
         LastCheckText.Text = FormatTime(snapshot.LastCheck);
         LastSuccessText.Text = FormatTime(snapshot.LastSuccess, "尚无验证成功记录");
@@ -134,13 +134,15 @@ public partial class MainWindow : Window
             .Select(entry => new EventRow(FormatTime(entry.Time), entry.Message)).ToArray();
         NoEventsText.Visibility = snapshot.RecentEvents.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PasswordHint.Text = snapshot.HasPassword
-            ? "已保存密码。同一账号留空表示保留；更换账号须填写新密码。"
+            ? "已保存密码。更换账号、运营商或登录地址须重新输入密码。"
             : "尚未保存密码。密码只在本机受保护保存。";
 
         if (!_formDirty || replaceForm)
         {
             _rendering = true;
             UsernameBox.Text = snapshot.Settings.Username;
+            PortalBox.Text = snapshot.Settings.PortalUrl;
+            CarrierBox.SelectedValue = snapshot.Settings.Carrier;
             StartWithWindowsBox.IsChecked = snapshot.Settings.StartWithWindows;
             EnabledBox.IsChecked = snapshot.Settings.Enabled;
             UnattendedBox.IsChecked = snapshot.Settings.UnattendedMode;
@@ -188,10 +190,29 @@ public partial class MainWindow : Window
         PasswordInput.Clear();
         _rendering = false;
         var username = UsernameBox.Text.Trim();
-        var unchangedAccount = BaseAccount(username) == BaseAccount(_snapshot.Settings.Username);
-        if (password.Length == 0 && (!unchangedAccount || (!_snapshot.HasPassword && username.Length > 0)))
+        if (!PortalEndpoint.TryCreate(PortalBox.Text, out var portal))
         {
-            Feedback("首次设置或更换账号时，请输入该账号的密码。", true);
+            Feedback("请输入校内 HTTP IPv4 门户首页地址，例如 http://10.62.164.14/。", true);
+            return;
+        }
+        var carrier = CarrierBox.SelectedValue as string;
+        if (!DrComProtocol.TryGetCarrier(carrier, out _))
+        {
+            Feedback("请选择受支持的认证选项。", true);
+            return;
+        }
+        if (username.Length > 0 && !DrComProtocol.TryNormalizeUsername(username, carrier!, out _))
+        {
+            Feedback("账号后缀与所选认证选项不匹配，请填写基础账号。", true);
+            return;
+        }
+        var unchangedAccount = username.Length == 0 && _snapshot.Settings.Username.Length == 0 ||
+            DrComProtocol.TryNormalizeUsername(username, carrier!, out var baseAccount) && baseAccount == _snapshot.Settings.Username;
+        if (password.Length == 0 && (!unchangedAccount || carrier != _snapshot.Settings.Carrier ||
+            portal.Root.AbsoluteUri != _snapshot.Settings.PortalUrl ||
+            (!_snapshot.HasPassword && username.Length > 0)))
+        {
+            Feedback("首次设置、更换账号、运营商或登录地址时，请重新输入密码。", true);
             return;
         }
         if (EnabledBox.IsChecked == true && username.Length == 0)
@@ -202,6 +223,8 @@ public partial class MainWindow : Window
         var settings = _snapshot.Settings with
         {
             Username = username,
+            PortalUrl = portal.Root.AbsoluteUri,
+            Carrier = carrier!,
             StartWithWindows = StartWithWindowsBox.IsChecked == true,
             Enabled = EnabledBox.IsChecked == true,
             UnattendedMode = UnattendedBox.IsChecked == true
@@ -385,7 +408,6 @@ public partial class MainWindow : Window
         UnsavedText.Text = "演示数据，不可保存，也不会操作系统服务。";
     }
 
-    private static string BaseAccount(string account) => account.EndsWith("@dx", StringComparison.OrdinalIgnoreCase) ? account[..^3] : account;
     private static string FormatTime(DateTimeOffset? time, string empty = "—") => time?.ToLocalTime().ToString("MM-dd HH:mm:ss") ?? empty;
     private static SolidColorBrush Brush(string color) => new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
     private static string DescribeService(BackgroundState state) => state switch
@@ -398,6 +420,7 @@ public partial class MainWindow : Window
         ConnectionState.Paused => "自动重连已暂停", ConnectionState.NeedsConfiguration => "请先配置账号密码",
         ConnectionState.Checking => "正在检查网络", ConnectionState.WaitingNetwork => "等待校园网恢复",
         ConnectionState.Authenticating => "正在认证", ConnectionState.Online => "公网验证通过",
+        ConnectionState.IntranetOnline => "校内网已登录（无外网）",
         ConnectionState.AuthenticationRejected => "认证被拒绝", ConnectionState.PortalUnavailable => "校园门户暂不可用",
         ConnectionState.LimitedConnectivity => "互联网检测受限", _ => "状态未知"
     };

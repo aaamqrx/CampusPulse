@@ -74,12 +74,23 @@
                     <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
                         <StackPanel>
                             <TextBlock Text="校园网设置" Style="{StaticResource SectionTitle}" />
-                            <TextBlock Text="校园电信 · Dr.COM" FontWeight="SemiBold" />
-                            <TextBlock Text="10.62.164.14 · 仅支持当前校园认证配置" Style="{StaticResource Description}" Margin="0,5,0,18" />
+                            <TextBlock Text="当前校园门户 · Dr.COM" FontWeight="SemiBold" />
+                            <TextBlock Text="输入校园门户地址；当前仅适配相同 Dr.COM 认证配置" Style="{StaticResource Description}" Margin="0,5,0,18" />
                             <StackPanel x:Name="SettingsForm">
+                                <Label Content="校园网登录地址" Target="{Binding ElementName=PortalBox}" Padding="0" Margin="0,0,0,6" />
+                                <TextBox x:Name="PortalBox" MaxLength="256" TextChanged="FieldChanged" AutomationProperties.Name="校园网登录地址" />
+                                <TextBlock Style="{StaticResource Description}" Text="填写校内 HTTP IPv4 首页，例如 http://10.62.164.14/；不支持路径、账号参数或其他协议。" Margin="0,5,0,13" TextWrapping="Wrap" />
+                                <Label Content="运营商" Target="{Binding ElementName=CarrierBox}" Padding="0" Margin="0,0,0,6" />
+                                <ComboBox x:Name="CarrierBox" SelectedValuePath="Tag" SelectedIndex="2" SelectionChanged="FieldChanged" AutomationProperties.Name="运营商">
+                                    <ComboBoxItem Content="中国联通" Tag="unicom" />
+                                    <ComboBoxItem Content="中国移动" Tag="mobile" />
+                                    <ComboBoxItem Content="中国电信" Tag="telecom" />
+                                    <ComboBoxItem Content="校内网（无外网）" Tag="intranet" />
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource Description}" Text="按校园登录页选择；校内网选项不提供外网。" Margin="0,5,0,13" />
                                 <Label Content="校园网账号" Target="{Binding ElementName=UsernameBox}" Padding="0" Margin="0,0,0,6" />
                                 <TextBox x:Name="UsernameBox" MaxLength="128" TextChanged="FieldChanged" AutomationProperties.Name="校园网账号" />
-                                <TextBlock Style="{StaticResource Description}" Text="填写基础账号，或以 @dx 结尾的电信账号。" Margin="0,5,0,13" />
+                                <TextBlock Style="{StaticResource Description}" Text="填写基础账号；也可粘贴与所选运营商匹配的完整账号。" Margin="0,5,0,13" />
                                 <Label Content="校园网密码" Target="{Binding ElementName=PasswordInput}" Padding="0" Margin="0,0,0,6" />
                                 <PasswordBox x:Name="PasswordInput" MaxLength="256" PasswordChanged="FieldChanged" AutomationProperties.Name="校园网密码" />
                                 <TextBlock x:Name="PasswordHint" Style="{StaticResource Description}" Text="尚未保存密码。密码只在本机受保护保存。" Margin="0,5,0,17" />
@@ -95,7 +106,7 @@
                                 <Button x:Name="SaveButton" Content="保存设置" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
                                 <Button x:Name="DeleteButton" Content="清除已保存凭据" Click="Delete_Click" />
                             </WrapPanel>
-                            <TextBlock Style="{StaticResource Description}" Text="学校认证接口使用 HTTP。软件不会上传账号密码到 GitHub；本机保存不改变学校的传输方式。" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Description}" Text="此 Dr.COM 适配使用 HTTP。保存其他地址前请确认是学校提供的门户；软件只向通过页面与配置核对的地址提交认证。" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                 </Grid>

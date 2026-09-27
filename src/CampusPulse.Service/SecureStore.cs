@@ -7,7 +7,13 @@ using CampusPulse.Core;
 
 namespace CampusPulse.Service;
 
-internal sealed record StoredCredential(string Username, string Password);
+internal sealed record StoredCredential(string Username, string Password)
+{
+    // Old local credentials lack these fields; never reuse them with the new portal template suffixes.
+    public string Carrier { get; init; } = "telecom";
+    public string PortalUrl { get; init; } = CampusSettings.SupportedPortal;
+    public int ProtocolVersion { get; init; } = 1;
+}
 internal sealed record EventHistory(DateTimeOffset? LastSuccess, List<StatusEntry> Entries);
 
 internal sealed class SecureStore
@@ -54,12 +60,19 @@ internal sealed class SecureStore
         if (!File.Exists(path)) return new();
         if (new FileInfo(path).Length > 16384) throw new InvalidDataException("配置过大。");
         var settings = JsonSerializer.Deserialize<CampusSettings>(File.ReadAllText(path)) ?? throw new InvalidDataException("配置为空。");
-        if (settings.ConfigVersion != 1 || settings.Carrier != "telecom" || settings.Username.Length > 128)
+        if (settings.ConfigVersion is not (1 or 2) || !DrComProtocol.TryGetCarrier(settings.Carrier, out _) ||
+            !PortalEndpoint.TryCreate(settings.PortalUrl, out _) ||
+            settings.Username is null || settings.Username.Length > 128)
             throw new InvalidDataException("不支持的配置格式。");
-        return settings with { OnlineCheckSeconds = Math.Clamp(settings.OnlineCheckSeconds, 30, 3600) };
+        return settings with
+        {
+            ConfigVersion = 2,
+            Enabled = settings.ConfigVersion == 2 && settings.Enabled,
+            OnlineCheckSeconds = Math.Clamp(settings.OnlineCheckSeconds, 30, 3600)
+        };
     }
 
-    public StoredCredential? LoadCredential(string username)
+    public StoredCredential? LoadCredential(string username, string carrier, string portalUrl)
     {
         var path = SafePath("credentials.dat");
         if (!File.Exists(path)) return null;
@@ -68,7 +81,9 @@ internal sealed class SecureStore
         try
         {
             var value = JsonSerializer.Deserialize<StoredCredential>(clear);
-            return value is not null && value.Username == username && value.Password.Length is > 0 and <= 256 ? value : null;
+            return value is not null && value.ProtocolVersion == 2 && value.Username == username &&
+                value.Carrier == carrier && value.PortalUrl == portalUrl &&
+                value.Password is { Length: > 0 and <= 256 } ? value : null;
         }
         finally { CryptographicOperations.ZeroMemory(clear); }
     }

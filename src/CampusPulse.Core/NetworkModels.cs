@@ -6,6 +6,7 @@ public sealed record NetworkCheckResult(bool InternetAvailable, bool PortalRecog
     bool NeedsAuthentication, string Message, bool PartialConnectivity = false)
 {
     public string ReasonCode { get; init; } = "";
+    public bool IntranetAvailable { get; init; }
 }
 
 public sealed record LoginResult(bool Accepted, bool CredentialsRejected, string Message)
@@ -19,7 +20,7 @@ public sealed record CampusNetworkPath(IPAddress SourceAddress, int InterfaceInd
 
 public interface INetworkPathResolver
 {
-    CampusNetworkPath? Resolve();
+    CampusNetworkPath? Resolve(IPAddress portalAddress);
 }
 
 public static class RetryPolicy

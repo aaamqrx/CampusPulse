@@ -12,8 +12,6 @@ public sealed class CampusNetworkClient : IDisposable
 {
     public static readonly Uri MicrosoftProbe = new("http://www.msftconnecttest.com/connecttest.txt");
     public static readonly Uri MozillaProbe = new("https://detectportal.firefox.com/success.txt");
-    private static readonly Uri StatusUri = new("http://10.62.164.14/drcom/chkstatus?callback=campuspulse&jsVersion=4.X");
-    private static readonly Uri ScriptUri = new("http://10.62.164.14/a40.js");
     private readonly INetworkPathResolver resolver;
     private readonly Func<CampusNetworkPath, HttpMessageHandler> handlerFactory;
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -29,25 +27,31 @@ public sealed class CampusNetworkClient : IDisposable
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public async Task<NetworkCheckResult> CheckAsync(CancellationToken cancellationToken)
+    public async Task<NetworkCheckResult> CheckAsync(string carrier, string portalUrl, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        if (!PortalEndpoint.TryCreate(portalUrl, out var endpoint))
+            return new(false, false, false, "登录地址不受支持；请输入校内 HTTP IPv4 门户首页") { ReasonCode = "unsupported_portal_address" };
+        if (!DrComProtocol.TryGetCarrier(carrier, out _))
+            return new(false, false, false, "不支持的运营商选项，未访问校园门户") { ReasonCode = "unsupported_carrier" };
         await gate.WaitAsync(cancellationToken);
         try
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(35));
-            var path = resolver.Resolve();
+            var path = resolver.Resolve(endpoint!.Address);
             if (path is null) return NoPath();
             using var client = CreateClient(path);
-            var probes = await ProbeAsync(client, deadline.Token);
+            var probes = await ProbeAsync(client, endpoint, deadline.Token);
             if (probes == 2) return new(true, false, false, "校园有线网络已通过两项公网验证") { ReasonCode = "internet_verified" };
             if (probes == 1) return new(false, false, false, "公网部分连通或探测受限，暂不重复认证", true) { ReasonCode = "partial_connectivity" };
 
-            var portal = await ReadPortalAsync(client, path, deadline.Token);
+            var portal = await ReadPortalAsync(client, path, carrier, endpoint, deadline.Token);
             return portal.Online switch
             {
                 false => new(false, true, true, "校园门户明确要求认证") { ReasonCode = "authentication_required" },
+                true when carrier == "intranet" => new(false, true, false, "校内网门户报告已在线；此选项不提供外网")
+                    { ReasonCode = "intranet_online", IntranetAvailable = true },
                 true => new(false, true, false, "门户报告已在线，但互联网尚未验证可用") { ReasonCode = "portal_online_internet_unverified" },
                 _ => new(false, true, false, "门户状态不明确，未提交认证") { ReasonCode = "portal_status_unknown" }
             };
@@ -59,10 +63,15 @@ public sealed class CampusNetworkClient : IDisposable
         finally { gate.Release(); }
     }
 
-    public async Task<LoginResult> LoginAsync(string username, string password, CancellationToken cancellationToken)
+    public async Task<LoginResult> LoginAsync(string username, string password, string carrier, string portalUrl,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        if (!DrComProtocol.TryNormalizeUsername(username, out string normalized) || !DrComProtocol.IsValidPassword(password))
+        if (!PortalEndpoint.TryCreate(portalUrl, out var endpoint))
+            return new(false, false, "登录地址不受支持；未提交凭据") { ReasonCode = "unsupported_portal_address" };
+        if (!DrComProtocol.TryGetCarrier(carrier, out _))
+            return new(false, false, "不支持的运营商选项") { ReasonCode = "unsupported_carrier" };
+        if (!DrComProtocol.TryNormalizeUsername(username, carrier, out string normalized) || !DrComProtocol.IsValidPassword(password))
             return new(false, false, "请检查账号及密码格式") { ReasonCode = "invalid_credentials_format" };
 
         await gate.WaitAsync(cancellationToken);
@@ -70,24 +79,24 @@ public sealed class CampusNetworkClient : IDisposable
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(45));
-            var path = resolver.Resolve();
+            var path = resolver.Resolve(endpoint!.Address);
             if (path is null) return new(false, false, "未能确认校园有线路径，请检查网线、地址及 VPN 路由") { ReasonCode = "network_path_unconfirmed" };
             using var client = CreateClient(path);
             // Recheck immediately before authentication. Manual reconnect is also an as-needed operation.
-            int probes = await ProbeAsync(client, deadline.Token);
+            int probes = await ProbeAsync(client, endpoint, deadline.Token);
             if (probes > 0)
                 return new(false, false, "已有公网连通证据，本次无需提交校园认证") { ReasonCode = "authentication_not_required" };
-            var portal = await ReadPortalAsync(client, path, deadline.Token);
+            var portal = await ReadPortalAsync(client, path, carrier, endpoint, deadline.Token);
             if (portal.Online is not false)
                 return new(portal.Online is true, false, "门户未明确要求认证，本次未提交凭据")
                 { ReasonCode = portal.Online is true ? "already_online" : "portal_status_unknown" };
-            string version = DrComProtocol.ParseJavaScriptVersion(await GetBodyAsync(client, ScriptUri, deadline.Token));
+            string version = DrComProtocol.ParseJavaScriptVersion(await GetBodyAsync(client, endpoint.At("/a40.js"), endpoint, deadline.Token));
             // Do not reuse terminal parameters across network changes, even within the same operation.
-            if (resolver.Resolve() != path)
+            if (resolver.Resolve(endpoint.Address) != path)
                 return new(false, false, "网络路径已变化，请重新检查") { ReasonCode = "network_path_changed" };
             cancellationToken.ThrowIfCancellationRequested();
-            Uri login = DrComProtocol.LoginUri(normalized, password, portal.Terminal, version);
-            string body = await GetBodyAsync(client, login, deadline.Token);
+            Uri login = DrComProtocol.LoginUri(normalized, password, portal.Terminal, version, carrier, endpoint);
+            string body = await GetBodyAsync(client, login, endpoint, deadline.Token);
             return DrComProtocol.ClassifyLoginResponse(body);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -99,13 +108,16 @@ public sealed class CampusNetworkClient : IDisposable
         finally { gate.Release(); }
     }
 
-    private async Task<(PortalParameters Terminal, bool? Online)> ReadPortalAsync(HttpClient client, CampusNetworkPath path, CancellationToken token)
+    private async Task<(PortalParameters Terminal, bool? Online)> ReadPortalAsync(HttpClient client,
+        CampusNetworkPath path, string carrier, PortalEndpoint endpoint, CancellationToken token)
     {
-        string html = await GetBodyAsync(client, new(DrComProtocol.PortalRoot), token);
+        string html = await GetBodyAsync(client, endpoint.Root, endpoint, token);
         var terminal = DrComProtocol.ParsePortal(html, path);
-        string configuration = await GetBodyAsync(client, DrComProtocol.ConfigurationUri(terminal), token);
-        DrComProtocol.ValidateConfiguration(configuration);
-        string status = await GetBodyAsync(client, StatusUri, token);
+        string configuration = await GetBodyAsync(client, DrComProtocol.ConfigurationUri(terminal, endpoint), endpoint, token);
+        Uri template = DrComProtocol.ValidateConfiguration(configuration, endpoint);
+        DrComProtocol.ValidateCarrierTemplate(await GetBodyAsync(client, template, endpoint, token), carrier);
+        string status = await GetBodyAsync(client,
+            endpoint.At("/drcom/chkstatus?callback=campuspulse&jsVersion=4.X"), endpoint, token);
         return (terminal, DrComProtocol.ParseOnlineStatus(status, path));
     }
 
@@ -117,27 +129,29 @@ public sealed class CampusNetworkClient : IDisposable
         return client;
     }
 
-    private static async Task<int> ProbeAsync(HttpClient client, CancellationToken token)
+    private static async Task<int> ProbeAsync(HttpClient client, PortalEndpoint endpoint, CancellationToken token)
     {
-        var results = await Task.WhenAll(ProbeOneAsync(client, MicrosoftProbe, "Microsoft Connect Test", token),
-            ProbeOneAsync(client, MozillaProbe, "success\n", token));
+        var results = await Task.WhenAll(ProbeOneAsync(client, MicrosoftProbe, "Microsoft Connect Test", endpoint, token),
+            ProbeOneAsync(client, MozillaProbe, "success\n", endpoint, token));
         return results.Count(result => result);
     }
 
-    private static async Task<bool> ProbeOneAsync(HttpClient client, Uri target, string expected, CancellationToken token)
+    private static async Task<bool> ProbeOneAsync(HttpClient client, Uri target, string expected,
+        PortalEndpoint endpoint, CancellationToken token)
     {
         try
         {
-            string body = await GetBodyAsync(client, target, token, maximumBytes: 256);
+            string body = await GetBodyAsync(client, target, endpoint, token, maximumBytes: 256);
             return string.Equals(body, expected, StringComparison.Ordinal);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested) { return false; }
         catch (Exception e) when (IsExpectedNetworkFailure(e)) { return false; }
     }
 
-    private static async Task<string> GetBodyAsync(HttpClient client, Uri target, CancellationToken token, int maximumBytes = DrComProtocol.MaximumBodyBytes)
+    private static async Task<string> GetBodyAsync(HttpClient client, Uri target, PortalEndpoint endpoint,
+        CancellationToken token, int maximumBytes = DrComProtocol.MaximumBodyBytes)
     {
-        if (!IsAllowedTarget(target)) throw new FormatException("target_not_allowed");
+        if (!IsAllowedTarget(target, endpoint)) throw new FormatException("target_not_allowed");
         using var request = new HttpRequestMessage(HttpMethod.Get, target) { Version = HttpVersion.Version11, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         if ((int)response.StatusCode is 429 or 503)
@@ -170,15 +184,17 @@ public sealed class CampusNetworkClient : IDisposable
         return encoding.GetString(bytes.ToArray());
     }
 
-    private static bool IsAllowedTarget(Uri target)
+    private static bool IsAllowedTarget(Uri target, PortalEndpoint endpoint)
     {
         if (!target.IsAbsoluteUri || target.UserInfo.Length != 0 || target.Fragment.Length != 0) return false;
         if (target == MicrosoftProbe || target == MozillaProbe) return true;
-        if (target.Scheme != "http" || target.Host != "10.62.164.14") return false;
+        if (target.Scheme != "http" || target.Host != endpoint.Address.ToString()) return false;
         return target.Port switch
         {
             80 => target.AbsolutePath is "/" or "/drcom/chkstatus" or "/a40.js",
-            801 => target.AbsolutePath is "/eportal/portal/page/loadConfig" or "/eportal/portal/login",
+            801 => target.AbsolutePath is "/eportal/portal/page/loadConfig" or "/eportal/portal/login" ||
+                Regex.IsMatch(target.AbsolutePath,
+                    "^/eportal/extern/[A-Za-z0-9]{1,64}/[A-Za-z0-9]{1,64}/pc\\.js$", RegexOptions.CultureInvariant),
             _ => false
         };
     }

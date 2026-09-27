@@ -11,15 +11,28 @@ internal sealed record PortalParameters(string Address, string Mac, string Vlan)
 public static class DrComProtocol
 {
     public const string Callback = "campuspulse";
-    public const string PortalRoot = "http://10.62.164.14/";
-    public const string LoginEndpoint = "http://10.62.164.14:801/eportal/portal/login";
     internal const int MaximumBodyBytes = 512 * 1024;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(250);
 
-    public static bool TryNormalizeUsername(string? username, out string normalized)
+    public static bool TryGetCarrier(string? carrier, out string suffix)
+    {
+        suffix = carrier switch
+        {
+            "unicom" => "@unicom",
+            "mobile" => "@cmcc",
+            "telecom" => "@telecom",
+            "intranet" => "",
+            _ => "INVALID"
+        };
+        return suffix != "INVALID";
+    }
+
+    public static bool TryNormalizeUsername(string? username, string carrier, out string normalized)
     {
         normalized = (username ?? "").Trim();
-        if (normalized.EndsWith("@dx", StringComparison.OrdinalIgnoreCase)) normalized = normalized[..^3];
+        if (!TryGetCarrier(carrier, out string suffix)) { normalized = ""; return false; }
+        if (suffix.Length != 0 && normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^suffix.Length];
         if (normalized.Length is < 1 or > 128 || normalized.Contains('@') ||
             normalized.StartsWith(",", StringComparison.Ordinal) || normalized.Any(char.IsControl) ||
             normalized.Any(char.IsWhiteSpace))
@@ -57,14 +70,6 @@ public static class DrComProtocol
         if (!Regex.IsMatch(html, @"<!--\s*Dr\.COMWebLoginID_[013]\.htm\s*-->", RegexOptions.CultureInvariant, RegexTimeout))
             throw new FormatException("portal_identity_mismatch");
 
-        string carrier = Scalar(html, "carrier");
-        using (var json = JsonDocument.Parse(carrier))
-        {
-            var entries = json.RootElement.GetProperty("yys").GetProperty("data");
-            if (!entries.EnumerateArray().Any(entry => Value(entry, "id") == "2" && Value(entry, "suffix") == "@dx"))
-                throw new FormatException("unsupported_carrier");
-        }
-
         string address = Scalar(html, "v46ip", required: false);
         if (string.IsNullOrWhiteSpace(address)) address = Scalar(html, "ss5");
         address = address.Trim();
@@ -84,7 +89,7 @@ public static class DrComProtocol
         return new(address, mac, vlan);
     }
 
-    internal static void ValidateConfiguration(string body)
+    internal static Uri ValidateConfiguration(string body, PortalEndpoint endpoint)
     {
         using var document = ParseJsonp(body);
         var root = document.RootElement;
@@ -100,6 +105,24 @@ public static class DrComProtocol
         foreach (var field in expected)
             if (!data.TryGetProperty(field.Key, out _) || Value(data, field.Key) != field.Value)
                 throw new FormatException("unsupported_configuration");
+        string program = Value(data, "program_index");
+        string page = Value(data, "page_index");
+        if (!Regex.IsMatch(program, "^[A-Za-z0-9]{1,64}$", RegexOptions.CultureInvariant, RegexTimeout) ||
+            !Regex.IsMatch(page, "^[A-Za-z0-9]{1,64}$", RegexOptions.CultureInvariant, RegexTimeout))
+            throw new FormatException("unsupported_template_path");
+        return endpoint.At($"/eportal/extern/{program}/{page}/pc.js", 801);
+    }
+
+    internal static void ValidateCarrierTemplate(string script, string carrier)
+    {
+        if (!TryGetCarrier(carrier, out string suffix)) throw new FormatException("unsupported_carrier");
+        if (!Regex.IsMatch(script, "<select\\b[^>]*\\bname\\s*=\\s*['\"]ISP_select['\"]",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout))
+            throw new FormatException("unsupported_carrier_template");
+        var options = Regex.Matches(script, "<option\\b[^>]*\\bvalue\\s*=\\s*['\"](?<suffix>[^'\"]*)['\"]",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+        if (!options.Any(option => option.Groups["suffix"].Value == suffix))
+            throw new FormatException("unsupported_carrier");
     }
 
     internal static bool? ParseOnlineStatus(string body, CampusNetworkPath path)
@@ -121,8 +144,8 @@ public static class DrComProtocol
         return version;
     }
 
-    internal static Uri ConfigurationUri(PortalParameters terminal) => Query(
-        "http://10.62.164.14:801/eportal/portal/page/loadConfig", new()
+    internal static Uri ConfigurationUri(PortalParameters terminal, PortalEndpoint endpoint) => Query(
+        endpoint.At("/eportal/portal/page/loadConfig", 801).AbsoluteUri, new()
         {
             ["callback"] = Callback, ["program_index"] = "", ["wlan_vlan_id"] = terminal.Vlan,
             ["wlan_user_ip"] = Base64(terminal.Address), ["wlan_user_ipv6"] = "",
@@ -130,14 +153,18 @@ public static class DrComProtocol
             ["wlan_ap_mac"] = "000000000000", ["gw_id"] = "000000000000", ["jsVersion"] = "4.X"
         });
 
-    internal static Uri LoginUri(string username, string password, PortalParameters terminal, string version) => Query(
-        LoginEndpoint, new()
+    internal static Uri LoginUri(string username, string password, PortalParameters terminal, string version,
+        string carrier, PortalEndpoint endpoint)
+    {
+        if (!TryGetCarrier(carrier, out string suffix)) throw new FormatException("unsupported_carrier");
+        return Query(endpoint.At("/eportal/portal/login", 801).AbsoluteUri, new()
         {
-            ["callback"] = Callback, ["login_method"] = "1", ["user_account"] = ",0," + username + "@dx",
+            ["callback"] = Callback, ["login_method"] = "1", ["user_account"] = ",0," + username + suffix,
             ["user_password"] = password, ["wlan_user_ip"] = terminal.Address, ["wlan_user_ipv6"] = "",
             ["wlan_user_mac"] = terminal.Mac, ["wlan_ac_ip"] = "", ["wlan_ac_name"] = "",
             ["jsVersion"] = version, ["terminal_type"] = "1", ["lang"] = "zh-cn"
         });
+    }
 
     public static LoginResult ClassifyLoginResponse(string body)
     {

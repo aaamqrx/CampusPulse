@@ -44,6 +44,16 @@
 - **创建与推送**：GitHub 连接器在创建前查询 `aaamqrx/CampusPulse` 返回不存在；本机 Git Credential Manager 已有 `aaamqrx` 登录，使用其现有凭据临时运行 `gh api user --jq .login`，返回 `aaamqrx`。`gh repo create aaamqrx/CampusPulse --public` 退出码 0；`git -c safe.directory=E:/Projects/01_CampusPulse push -u origin main` 退出码 0。设备验证码登录流程已按用户偏好取消，没有记录或输出凭据。
 - **远端回读**：GitHub 连接器读取到仓库 `aaamqrx/CampusPulse`，仓库 ID `1390752756`、可见性 `public`、默认分支 `main`；`git ls-remote origin refs/heads/main` 返回 `4d2acac3b69704ac2aac704814bfecc7eee18be9`；连接器读取远端 `README.md` 成功。仓库地址：[aaamqrx/CampusPulse](https://github.com/aaamqrx/CampusPulse)。结果：预览源码公开上传通过；GitHub Actions 与 Release 未执行。此次没有重新构建、运行原生服务、真实认证、跨夜测试或安装生命周期测试。
 
+## 2026-09-27：运营商选择与自填门户地址（基于 `9adaffb` 的工作区）
+
+- **只读门户核对：通过，未认证**。用户截图显示“中国联通、中国移动、中国电信、校内网（无外网）”。只读请求 `http://10.62.164.14/` 返回 Dr.COM 首页；首页旧 `carrier` 字段仍写 `@lt`、`@dx`。按已保存的 `page/loadConfig` 页面标识读取浏览器加载的 `pc.js`，四个实际 `option value` 依次为 `@unicom`、`@cmcc`、`@telecom`、空值。请求只读取首页及模板，未提交账号密码。证据：忽略目录 `.local/` 的历史配置、用户截图及本次只读命令输出；动态模板未来可能变化，运行时仍须重新核对。
+- **首次开发检查失败**：`powershell -NoProfile -File scripts/check-dev.ps1` 退出码 1。Core、Service 已构建，App 构建时旧演示窗口进程占用 `CampusPulse.Core.dll`，复制失败；用户随后确认演示窗口已关闭。此次失败没有计入通过，也不是源码编译错误。
+- **运营商改动离线检查通过**：关闭旧窗口后同一命令退出码 0，四项目 Release 构建 0 警告、0 错误，13/13 进程内模拟测试通过。新增四选项账号后缀、模板缺失时阻止提交、错配后缀与校内网不误报公网。边界：未运行正式后台或真实认证。
+- **自填地址改动离线检查通过**：再次运行 `powershell -NoProfile -File scripts/check-dev.ps1`，退出码 0，四项目 Release 构建 0 警告、0 错误，15/15 进程内模拟测试通过。新增校内私有 IPv4 门户地址输入校验及模拟自填地址的固定目标检查；所有模拟 HTTP 由测试进程内处理。证据：`src/CampusPulse.Core/PortalEndpoint.cs`、`tests/CampusPulse.Tests/Program.cs` 及本次命令输出。边界：新界面控件未在原生窗口逐项操作，服务配置迁移与权限未在系统中验收；没有真实校园登录、跨夜、安装、重新打包或 Release。
+- **旧凭据绑定离线检查通过**：新增服务存储测试后运行同一命令，退出码 0，四项目 Release 构建 0 警告、0 错误，16/16 项模拟与临时目录存储检查通过。假数据测试确认旧配置加载时自动重连关闭、旧协议版本凭据不再读取，且新版凭据须同时匹配账号、运营商及门户地址。证据：`src/CampusPulse.Service/SecureStore.cs`、`tests/CampusPulse.Tests/Program.cs` 与本次命令输出。边界：临时目录使用假密码；没有系统服务身份、ACL、真实密码或 GUI 原生交互验收。
+- **新版 WPF 演示启动：通过**。以 `--smoke-test` 启动当前构建的 App DLL，2 秒后进程 `Responding=True`，取得非零主窗口句柄与“CampusPulse · 校园网自动连接（演示，未联网）”标题；仅停止本次启动的进程。该模式没有连接服务或校园网络。边界：未逐项点击新控件、保存设置或检查视觉排版，不能作为正式界面和后台联动通过证据。
+- **公开源码暂存检查**：按路径白名单暂存 19 个源码、测试、文档文件，`git diff --cached --check` 无空白错误，暂存路径未含 `.local/`、`.tools/`、`artifacts/`、构建输出或凭据文件。首次明显敏感模式扫描因 Git 参数写法错误未完成；修正后宽泛的 `user_password=` 规则仅命中离线测试中明确写出的 `dummy` 编码断言。单独复核该行后，私钥、GitHub/OpenAI 令牌模式和路径检查通过。模式扫描不能证明绝对无敏感数据，发布前仍需逐项审查暂存内容。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

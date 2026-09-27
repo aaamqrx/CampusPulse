@@ -35,7 +35,7 @@ internal sealed class ConnectionWorker : BackgroundService
         try
         {
             settings = store.LoadSettings();
-            credential = store.LoadCredential(settings.Username);
+            credential = store.LoadCredential(settings.Username, settings.Carrier, settings.PortalUrl);
             var history = store.LoadHistory();
             lastSuccess = history.LastSuccess;
             events.AddRange(history.Entries.Where(x => x.Time > DateTimeOffset.UtcNow.AddDays(-7)).TakeLast(80));
@@ -104,26 +104,34 @@ internal sealed class ConnectionWorker : BackgroundService
 
             if (request.Settings is null) return new(false, "缺少设置", Snapshot);
             var desired = request.Settings;
-            if (desired.ConfigVersion != 1 || desired.Carrier != "telecom")
-                return new(false, "当前版本仅支持内置校园电信配置", Snapshot);
-            if (!DrComProtocol.TryNormalizeUsername(desired.Username, out string name) &&
+            if (desired.ConfigVersion != 2 || !DrComProtocol.TryGetCarrier(desired.Carrier, out _))
+                return new(false, "当前版本不支持所选运营商", Snapshot);
+            if (!PortalEndpoint.TryCreate(desired.PortalUrl, out var portal))
+                return new(false, "登录地址须为校内 HTTP IPv4 门户首页", Snapshot);
+            if (!DrComProtocol.TryNormalizeUsername(desired.Username, desired.Carrier, out string name) &&
                 !string.IsNullOrWhiteSpace(desired.Username))
-                return new(false, "账号格式不正确，请输入基础校园账号", Snapshot);
+                return new(false, "账号格式或运营商后缀不正确，请输入基础校园账号", Snapshot);
             if (!string.IsNullOrEmpty(request.Password) && !DrComProtocol.IsValidPassword(request.Password))
                 return new(false, "密码格式不正确", Snapshot);
             bool changedName = name != settings.Username;
+            bool changedCarrier = desired.Carrier != settings.Carrier;
+            bool changedPortal = portal.Root.AbsoluteUri != settings.PortalUrl;
             bool changedPassword = !string.IsNullOrEmpty(request.Password);
-            if (changedName && !changedPassword && name.Length > 0)
-                return new(false, "更换账号时请同时输入该账号的密码", Snapshot);
-            var newCredential = changedPassword ? new StoredCredential(name, request.Password!) : credential;
-            if (desired.Enabled && (string.IsNullOrEmpty(name) || newCredential is null || newCredential.Username != name))
+            if ((changedName || changedCarrier || changedPortal) && !changedPassword && name.Length > 0)
+                return new(false, "更换账号、运营商或登录地址时请重新输入密码", Snapshot);
+            var newCredential = changedPassword ? new StoredCredential(name, request.Password!)
+                { Carrier = desired.Carrier, PortalUrl = portal.Root.AbsoluteUri, ProtocolVersion = 2 } : credential;
+            if (desired.Enabled && (string.IsNullOrEmpty(name) || newCredential is null ||
+                newCredential.Username != name || newCredential.Carrier != desired.Carrier ||
+                newCredential.PortalUrl != portal.Root.AbsoluteUri))
                 return new(false, "启用自动重连前，请填写账号和密码", Snapshot);
             if (changedPassword && string.IsNullOrEmpty(name)) return new(false, "请同时填写账号", Snapshot);
             desired = desired with
             {
                 Username = name, OnlineCheckSeconds = Math.Clamp(desired.OnlineCheckSeconds, 30, 3600),
-                AuthenticationBlocked = changedName || changedPassword ? false : settings.AuthenticationBlocked,
-                BlockedReason = changedName || changedPassword ? "" : settings.BlockedReason
+                PortalUrl = portal.Root.AbsoluteUri,
+                AuthenticationBlocked = changedName || changedCarrier || changedPortal || changedPassword ? false : settings.AuthenticationBlocked,
+                BlockedReason = changedName || changedCarrier || changedPortal || changedPassword ? "" : settings.BlockedReason
             };
             bool previousStartup = startup.Read();
             try
@@ -137,8 +145,9 @@ internal sealed class ConnectionWorker : BackgroundService
                 throw;
             }
             settings = desired; credential = name.Length == 0 ? null : newCredential;
+            if (changedName || changedCarrier || changedPortal) lastSuccess = null;
             actualStartup = startup.Read();
-            if (changedName || changedPassword) { failures = 0; nextAuthentication = DateTimeOffset.MinValue; }
+            if (changedName || changedCarrier || changedPortal || changedPassword) { failures = 0; nextAuthentication = DateTimeOffset.MinValue; }
             nextCheck = settings.Enabled ? DateTimeOffset.UtcNow : null;
             SetState(settings.AuthenticationBlocked ? ConnectionState.AuthenticationRejected :
                 settings.Enabled ? ConnectionState.Checking : ConnectionState.Paused,
@@ -228,9 +237,10 @@ internal sealed class ConnectionWorker : BackgroundService
     {
         lastCheck = DateTimeOffset.UtcNow;
         SetState(ConnectionState.Checking, "正在检测校园有线网络");
-        var check = await network.CheckAsync(token);
+        var check = await network.CheckAsync(settings.Carrier, settings.PortalUrl, token);
         token.ThrowIfCancellationRequested();
         if (check.InternetAvailable) { MarkOnline(); return; }
+        if (check.IntranetAvailable) { MarkIntranetOnline(); return; }
         if (check.PartialConnectivity)
         { failures++; SetState(ConnectionState.LimitedConnectivity, check.Message, "PartialConnectivity"); return; }
         if (!check.PortalRecognized)
@@ -241,14 +251,15 @@ internal sealed class ConnectionWorker : BackgroundService
         { SetState(ConnectionState.LimitedConnectivity, "检测到需要认证；本次仅检测，没有提交密码", "NeedsAuthentication"); return; }
         if (settings.AuthenticationBlocked && !explicitReconnect)
         { failures++; SetState(ConnectionState.AuthenticationRejected, settings.BlockedReason, "AuthenticationBlocked"); return; }
-        if (credential is null || credential.Username != settings.Username)
+        if (credential is null || credential.Username != settings.Username || credential.Carrier != settings.Carrier ||
+            credential.PortalUrl != settings.PortalUrl)
         { SetState(ConnectionState.NeedsConfiguration, "请先配置账号和密码", "MissingCredentials"); return; }
         if (DateTimeOffset.UtcNow < nextAuthentication)
         { failures++; SetState(ConnectionState.LimitedConnectivity, "正在等待重试间隔，请稍后再试", "AuthenticationCooldown"); return; }
         token.ThrowIfCancellationRequested();
         nextAuthentication = DateTimeOffset.UtcNow.AddSeconds(5);
-        SetState(ConnectionState.Authenticating, "正在进行一次校园电信认证");
-        var login = await network.LoginAsync(credential.Username, credential.Password, token);
+        SetState(ConnectionState.Authenticating, "正在进行一次校园账号认证");
+        var login = await network.LoginAsync(credential.Username, credential.Password, settings.Carrier, settings.PortalUrl, token);
         token.ThrowIfCancellationRequested();
         if (login.CredentialsRejected)
         {
@@ -268,9 +279,10 @@ internal sealed class ConnectionWorker : BackgroundService
         foreach (int seconds in new[] { 2, 3, 10 })
         {
             await Task.Delay(TimeSpan.FromSeconds(seconds), token);
-            var verified = await network.CheckAsync(token);
+            var verified = await network.CheckAsync(settings.Carrier, settings.PortalUrl, token);
             token.ThrowIfCancellationRequested();
             if (verified.InternetAvailable) { MarkOnline(); return; }
+            if (verified.IntranetAvailable) { MarkIntranetOnline(); return; }
         }
         failures++;
         SetState(ConnectionState.LimitedConnectivity, "校园认证已接受，互联网尚未验证可用；等待复查", "AwaitingInternetVerification");
@@ -286,6 +298,12 @@ internal sealed class ConnectionWorker : BackgroundService
         }
         SetState(ConnectionState.Online, "校园有线网络已通过两个公网探测");
         PersistHistory();
+    }
+
+    private void MarkIntranetOnline()
+    {
+        failures = 0;
+        SetState(ConnectionState.IntranetOnline, "校内网门户报告已在线；所选服务不提供外网");
     }
 
     private void SetState(ConnectionState state, string message, string error = "")

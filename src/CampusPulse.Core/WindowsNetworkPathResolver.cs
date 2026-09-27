@@ -5,17 +5,15 @@ using System.Runtime.InteropServices;
 
 namespace CampusPulse.Core;
 
-/// <summary>Conservatively accepts only the physical Ethernet route to the fixed portal.</summary>
+/// <summary>Conservatively accepts only the physical Ethernet route to the selected portal.</summary>
 public sealed class WindowsNetworkPathResolver : INetworkPathResolver
 {
-    internal static readonly IPAddress PortalAddress = IPAddress.Parse("10.62.164.14");
-
-    public CampusNetworkPath? Resolve()
+    public CampusNetworkPath? Resolve(IPAddress portalAddress)
     {
         if (!OperatingSystem.IsWindows()) return null;
         try
         {
-            uint index = BestInterface(PortalAddress);
+            uint index = BestInterface(portalAddress);
             if (index == 0 || !IsPhysicalConnectedInterface(index)) return null;
             var matches = NetworkInterface.GetAllNetworkInterfaces().Where(n =>
                 n.OperationalStatus == OperationalStatus.Up && !n.IsReceiveOnly &&
