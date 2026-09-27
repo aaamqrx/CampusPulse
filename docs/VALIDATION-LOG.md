@@ -32,6 +32,11 @@
 - **本地版本控制准备**：在此前没有 `.git` 的目录初始化 `main` 分支；以路径白名单暂存 37 个源码、文档、脚本与项目元数据文件。`git diff --cached --check` 无空白错误；暂存文件名检查未发现 `.local/`、`.tools/`、`artifacts/`、`bin/`、`obj/` 或密钥文件；明显私钥/令牌/长密码字面量模式扫描未命中。当前沙箱账号与目录所有者不同，Git 操作使用单次 `-c safe.directory=E:/Projects/01_CampusPulse`，未修改全局安全目录。使用 GitHub 已连接账号的 ID 格式 no-reply 地址创建本地提交 `b63b30c`；未创建或上传远端仓库。
 - **补充离线测试及重建通过**：在本地提交 `799eceb` 后增加 NET-01 双探测已联网跳过认证、NET-08 伪 HTTP 200 不判联网、SYS-03 路径变化时阻止提交凭据。`.tools/dotnet/dotnet.exe run --project tests/CampusPulse.Tests -c Release` 返回 9/9 通过；再次运行完整 `scripts/build.ps1` 退出码 0，构建、9 项模拟测试、自包含发布、Inno 编译均通过。证据：`artifacts/logs/build-20260927-191414-086.log` 和 `artifacts/build-manifest.json`。重建安装包 79,254,977 字节，SHA-256 `deb90f0d2d8f0a5b2d91af79362cc9e936882faded366408d61e83c699b199b0`，与清单及 `sha256.txt` 一致；旧安装包哈希已作废。本次没有再执行产品安装，先前安装失败边界保持不变。
 
+## 2026-09-27：切换为功能先验、最后打包（提交 `c065a78` 后）
+
+- **用户顺序调整**：用户要求先不通过安装包测试，在所有功能修改完成后再打包 EXE。历史本地安装包保留在已忽略的 `artifacts/` 中，不作为当前验收入口；本轮没有运行安装器。
+- **无打包开发检查通过**：新增 `scripts/check-dev.ps1`；执行 `scripts/check-dev.ps1 -DotNetPath .tools/dotnet/dotnet.exe` 及文档入口 `powershell -NoProfile -File scripts/check-dev.ps1`，两次退出码均为 0。Core、Service、App、Tests 的 Release 构建均为 0 警告、0 错误，9/9 项进程内模拟测试通过。这些命令没有执行 `publish`、Inno 编译、Windows 服务安装或真实认证。证据：该脚本及本次命令输出；原生窗口/后台运行和校园网结果仍未验证。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

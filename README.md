@@ -11,7 +11,7 @@
 - [开发设计文档](docs/DEVELOPMENT.md)：已确认需求、三个独立开关、架构、实际门户证据、认证策略、安全与接口设计。
 - [Campus-Flow 功能参考](docs/REFERENCE-FEATURES.md)：10 类功能的采用方式、针对本场景的调整和证据边界。
 - [测试与发布计划](docs/TESTING-AND-RELEASE.md)：可执行验收用例、安装升级卸载、公开 GitHub 与预发布流程。
-- [验证记录](docs/VALIDATION-LOG.md)：已实际执行的只读调查与文件盘点，不将计划写成通过结果。
+- [验证记录](docs/VALIDATION-LOG.md)：实际执行的构建、模拟测试与失败边界，不将计划写成通过结果。
 - [早期范围记录](docs/implementation-plan.md)：保留此前需求确认，不作为已完成功能列表。
 
 ## 第一版范围
@@ -30,6 +30,8 @@
 计划采用 C#、.NET 10 LTS、WPF、Windows Service 和 Inno Setup。安装包包含运行环境；安装及首版设置窗口需要管理员权限。
 
 `scripts/build.ps1` 已在本机使用 .NET 10.0.203 和 Inno Setup 6.7.3 完成 Release 构建、9 项模拟测试、自包含发布与安装包编译。安装器静默启动曾停滞，检查时没有创建产品服务或数据目录；服务运行、升级卸载和校园网认证尚未验收。安装包目前仅供本地开发验证，不作为已验收的可分享版本。
+
+**当前开发顺序：先修复并验证功能，最后重新打包。** 日常检查运行 `powershell -File scripts/check-dev.ps1`，只构建源码并运行模拟测试，不生成发布文件或安装包，也不触发真实校园认证。已有的旧预览安装包仅保留为历史本地产物，不作为当前验收入口。
 
 预期 GitHub 仓库为 `aaamqrx/CampusPulse`，公开发布源码；安装包通过 Releases 提供。本地文档撰写时，仓库创建和上传尚未完成。
 
