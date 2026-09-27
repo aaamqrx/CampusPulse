@@ -38,6 +38,12 @@
 - **无打包开发检查通过**：新增 `scripts/check-dev.ps1`；执行 `scripts/check-dev.ps1 -DotNetPath .tools/dotnet/dotnet.exe` 及文档入口 `powershell -NoProfile -File scripts/check-dev.ps1`，两次退出码均为 0。Core、Service、App、Tests 的 Release 构建均为 0 警告、0 错误，9/9 项进程内模拟测试通过。这些命令没有执行 `publish`、Inno 编译、Windows 服务安装或真实认证。证据：该脚本及本次命令输出；原生窗口/后台运行和校园网结果仍未验证。
 - **WPF 演示窗口启动检查**：执行 `.tools/dotnet/dotnet.exe src/CampusPulse.App/bin/Release/net10.0-windows/CampusPulse.App.dll --smoke-test`，进程保持运行，`Get-Process` 读取到窗口标题“CampusPulse · 校园网自动连接（演示，未联网）”、非零主窗口句柄及 `Responding=True`。这只证明演示窗口在当前 Windows 会话中启动；尚未检查视觉排版、控件操作、后台服务或真实校园网。新增 `scripts/open-demo.ps1` 作为可重复打开入口。
 
+## 2026-09-27：公开源码仓库创建与回读（首次推送 `4d2acac`）
+
+- **上传前检查**：本地 `main` 为 `4d2acac3b69704ac2aac704814bfecc7eee18be9`；检查 39 个已跟踪文件和 Git 历史，未发现 `.local/`、`.tools/`、`artifacts/`、`bin/`、`obj/` 或明显凭据文件。工作区另有 5 个未提交的源码改动，本次首次推送未包含这些改动。边界：模式扫描不能代替对未来每次提交的审查。
+- **创建与推送**：GitHub 连接器在创建前查询 `aaamqrx/CampusPulse` 返回不存在；本机 Git Credential Manager 已有 `aaamqrx` 登录，使用其现有凭据临时运行 `gh api user --jq .login`，返回 `aaamqrx`。`gh repo create aaamqrx/CampusPulse --public` 退出码 0；`git -c safe.directory=E:/Projects/01_CampusPulse push -u origin main` 退出码 0。设备验证码登录流程已按用户偏好取消，没有记录或输出凭据。
+- **远端回读**：GitHub 连接器读取到仓库 `aaamqrx/CampusPulse`，仓库 ID `1390752756`、可见性 `public`、默认分支 `main`；`git ls-remote origin refs/heads/main` 返回 `4d2acac3b69704ac2aac704814bfecc7eee18be9`；连接器读取远端 `README.md` 成功。仓库地址：[aaamqrx/CampusPulse](https://github.com/aaamqrx/CampusPulse)。结果：预览源码公开上传通过；GitHub Actions 与 Release 未执行。此次没有重新构建、运行原生服务、真实认证、跨夜测试或安装生命周期测试。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。
