@@ -108,6 +108,7 @@
 - **正式后台只读联网检查：通过，未登录**。通过管理员权限连接受限本机管道，先发送 `status`，回读 `Enabled=false`、`HasPassword=true`、初始 Paused、实际自启关闭；随后只发送一次 `check`，再次回读 `Enabled=false`、`State=Online`、无错误码且 `LastCheck`/`LastSuccess` 已更新。证据：忽略目录 `.local/admin-service-readonly.ps1`、`.local/admin-service-readonly-result.txt` 与服务状态命令输出。该脚本未发送 `reconnect`、账号或密码；检测时网络已在线，不能记为本软件真实认证、断网恢复或跨夜成功。正式 WPF 窗口显示状态仍待核对。
 - **正式窗口显示与关闭：通过本轮人工核对**。管理员执行 `scripts/dev-service-validation.ps1 -Action Open` 后输出“已打开正式界面”；进程查询显示主窗口标题为“CampusPulse · 校园网自动连接”、`Responding=True`，没有演示字样。用户确认窗口显示在线且自动重连开关关闭，与后台 `State=Online`、`Enabled=false` 一致。窗口关闭动作按产品设计先收起到托盘；结束本次由代理启动的管理员设置进程后，复核进程已退出，后台服务仍为 Running/Manual。证据：用户反馈、忽略目录 `.local/admin-open-result.txt`、`.local/admin-close-result.txt` 及进程/服务查询输出。此项证明本轮状态显示，不代表真实认证或完整 UI 功能已验收。
 - **源码里程碑提交、推送与远端回读：通过**。验收后再次运行 `powershell -NoProfile -File scripts/check-dev.ps1`，退出码 0，四项目 Release 构建 0 警告、0 错误，24/24 离线检查通过。按 13 个源码/文档/测试文件白名单暂存；`git diff --cached --check` 通过，明显令牌和私钥签名扫描无命中，暂存路径不含 `.local/`、`.tools/`、`artifacts/` 或构建输出。提交 `b2fb7018b51d483e8816e7ea257bffa8f912d90b` 后推送 `origin main` 退出码 0；`git ls-remote origin refs/heads/main` 返回相同哈希。结果仅为公开源码发布；未上传本机数据、安装包或 Release，未完成真实登录及跨夜验收。
+- **SEC-01 部分权限检查：通过**。在当前未提升的用户令牌中只尝试连接 `CampusPulse.Control.v1` 命名管道，不发送任何命令或凭据；连接立即抛出 `UnauthorizedAccessException`，退出码 0，符合仅管理员/SYSTEM 可访问的预期。此前提升后同一管道可正常回读状态并触发只读检查。此项尚未以另一个普通本地用户验证，也未逐项核对数据文件 ACL，因此 SEC-01 完整验收仍待执行。
 
 ## 后续记录格式
 
