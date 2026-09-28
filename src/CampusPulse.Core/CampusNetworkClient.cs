@@ -209,11 +209,13 @@ public sealed class CampusNetworkClient : IDisposable
             ConnectCallback = async (context, token) =>
             {
                 if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
-                var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, AddressFamily.InterNetwork, token);
+                IPAddress[] addresses = IPAddress.TryParse(context.DnsEndPoint.Host, out var literal)
+                    ? [literal] : await BoundDnsResolver.ResolveAsync(context.DnsEndPoint.Host, path, token);
                 foreach (var address in addresses)
                 {
                     if (!WindowsNetworkPathResolver.IsUsableAddress(address) ||
-                        WindowsNetworkPathResolver.BestInterface(address) != path.InterfaceIndex) continue;
+                        !WindowsNetworkPathResolver.HasRoute(checked((uint)path.InterfaceIndex),
+                            path.SourceAddress, address)) continue;
                     var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                     try
                     {

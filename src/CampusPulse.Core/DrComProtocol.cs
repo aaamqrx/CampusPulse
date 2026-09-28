@@ -116,12 +116,17 @@ public static class DrComProtocol
     internal static void ValidateCarrierTemplate(string script, string carrier)
     {
         if (!TryGetCarrier(carrier, out string suffix)) throw new FormatException("unsupported_carrier");
-        if (!Regex.IsMatch(script, "<select\\b[^>]*\\bname\\s*=\\s*['\"]ISP_select['\"]",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout))
-            throw new FormatException("unsupported_carrier_template");
-        var options = Regex.Matches(script, "<option\\b[^>]*\\bvalue\\s*=\\s*['\"](?<suffix>[^'\"]*)['\"]",
+        var selects = Regex.Matches(script, "<select\\b(?<attributes>[^>]*)>(?<options>.*?)</select\\s*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+        var carrierSelects = selects.Where(select => Regex.IsMatch(select.Groups["attributes"].Value,
+            "(?:^|\\s)name\\s*=\\s*['\"]ISP_select['\"]",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout)).ToArray();
+        if (carrierSelects.Length != 1) throw new FormatException("unsupported_carrier_template");
+        var options = Regex.Matches(carrierSelects[0].Groups["options"].Value,
+            "<option\\b[^>]*\\bvalue\\s*=\\s*['\"](?<suffix>[^'\"]*)['\"]",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
-        if (!options.Any(option => option.Groups["suffix"].Value == suffix))
+        var values = options.Select(option => option.Groups["suffix"].Value).ToArray();
+        if (values.Count(value => value == suffix) != 1 || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
             throw new FormatException("unsupported_carrier");
     }
 

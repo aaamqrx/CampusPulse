@@ -272,7 +272,7 @@ internal sealed class ConnectionWorker : BackgroundService
         if (!login.Accepted)
         {
             failures++;
-            nextAuthentication = DateTimeOffset.UtcNow.AddSeconds(RetrySeconds[Math.Min(failures - 1, RetrySeconds.Length - 1)]);
+            nextAuthentication = DateTimeOffset.UtcNow.Add(RetryPolicy.GetDelay(failures, retryAfter: login.RetryAfter));
             SetState(ConnectionState.PortalUnavailable, login.Message, "AuthenticationFailed"); return;
         }
         nextAuthentication = DateTimeOffset.UtcNow.AddMinutes(5);

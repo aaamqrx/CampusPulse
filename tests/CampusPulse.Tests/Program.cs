@@ -8,18 +8,26 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-12 normalizes carrier suffix and encodes credentials", LoginEncoding),
     ("NET-12 all four portal choices use their rendered suffixes", CarrierChoices),
     ("NET-09 missing selected option prevents credential submission", CarrierOptionMissing),
+    ("NET-09 unrelated or duplicate carrier options prevent credential submission", CarrierTemplateAmbiguity),
     ("CFG-06 mismatched suffix and unknown carrier are rejected", CarrierInputRejected),
     ("NET-02 intranet login is not reported as public internet", IntranetOnly),
     ("CFG-06 custom portal address rejects unsafe roots", PortalAddressValidation),
     ("NET-09 custom supported portal keeps all credential requests on chosen host", CustomPortal),
+    ("NET-09 redirected template refuses credential submission", RedirectedTemplate),
     ("SEC-03 old credentials pause and new credentials bind to carrier and portal", CredentialIdentity),
+    ("NET-06 blocked authentication survives settings reload", BlockedAuthenticationPersists),
+    ("NET-06 rejected authentication remains blocked after worker restart", WorkerRestartKeepsRejection),
     ("NET-10 one successful probe prevents authentication", PartialConnectivity),
+    ("NET-10 Ethernet DNS accepts a public CNAME target and rejects fake IP", BoundDnsResponse),
     ("NET-09 portal identity mismatch prevents authentication", PortalMismatch),
     ("NET-02 valid portal permits one login request", LoginOnce),
     ("NET-01 verified internet skips portal and login", AlreadyOnline),
     ("NET-08 HTTP 200 with portal content is not internet", PortalContentIsNotInternet),
     ("SYS-03 changed network path prevents login", NetworkPathChanged),
     ("NET-06 rejected credentials are classified conservatively", Rejection),
+    ("NET-05 server retry limit is bounded", ServerRetryLimit),
+    ("NET-11 stalled login times out without reporting success", StalledLoginTimesOut),
+    ("NET-11 concurrent reconnects serialize credential requests", ConcurrentReconnects),
     ("NET-05 retry delay remains bounded", RetryBounds)
 };
 int failed = 0;
@@ -70,6 +78,31 @@ static async Task CarrierOptionMissing()
     Check(fixture.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)), "no credential request");
 }
 
+static async Task CarrierTemplateAmbiguity()
+{
+    using var unrelated = new Fixture
+    {
+        TemplateOverride = "<select name=\"ISP_select\"><option value=\"@telecom\">中国电信</option></select>" +
+            "<select name=\"other\"><option value=\"@cmcc\">中国移动</option></select>"
+    };
+    var unrelatedResult = await unrelated.Client.LoginAsync("student", "dummy", "mobile",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(unrelatedResult.ReasonCode == "portal_unrecognized" &&
+        unrelated.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)),
+        "unrelated dropdown cannot authorize credential submission");
+
+    using var duplicate = new Fixture
+    {
+        TemplateOverride = "<select name=\"ISP_select\"><option value=\"@cmcc\">中国移动</option>" +
+            "<option value=\"@cmcc\">重复选项</option></select>"
+    };
+    var duplicateResult = await duplicate.Client.LoginAsync("student", "dummy", "mobile",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(duplicateResult.ReasonCode == "portal_unrecognized" &&
+        duplicate.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)),
+        "duplicate carrier suffix cannot authorize credential submission");
+}
+
 static async Task CarrierInputRejected()
 {
     Check(!DrComProtocol.TryNormalizeUsername("student@dx", "telecom", out _), "old suffix rejected");
@@ -115,6 +148,89 @@ static async Task CustomPortal()
         "login used chosen host");
 }
 
+static async Task RedirectedTemplate()
+{
+    using var fixture = new Fixture { RedirectTemplate = true };
+    var result = await fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(!result.Accepted && result.ReasonCode == "portal_unrecognized", "redirect refused");
+    Check(fixture.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)),
+        "credentials not submitted after template redirect");
+}
+
+static Task BlockedAuthenticationPersists()
+{
+    string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SecureStore(directory);
+        store.SaveSettings(new CampusSettings
+        {
+            Enabled = true, Username = "student", AuthenticationBlocked = true,
+            BlockedReason = "校园认证拒绝账号或密码，请检查后主动重试"
+        });
+        var reloaded = new SecureStore(directory).LoadSettings();
+        Check(reloaded.Enabled && reloaded.AuthenticationBlocked && reloaded.BlockedReason.Length > 0,
+            "rejected state retained after settings reload");
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+    return Task.CompletedTask;
+}
+
+static async Task WorkerRestartKeepsRejection()
+{
+    string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SecureStore(directory);
+        var settings = new CampusSettings { Enabled = true, Username = "student", Carrier = "telecom" };
+        store.SaveConfiguration(settings, new StoredCredential("student", "dummy")
+        { ProtocolVersion = 2, Carrier = "telecom", PortalUrl = settings.PortalUrl });
+        using var fixture = new Fixture { RejectLogin = true };
+        using (var first = new ConnectionWorker(store, new StartupManager(), fixture.Client))
+        {
+            await first.StartAsync(CancellationToken.None);
+            try
+            {
+                await WaitUntil(() => first.Snapshot.State == ConnectionState.AuthenticationRejected,
+                    "first worker records credential rejection");
+            }
+            finally { await first.StopAsync(CancellationToken.None); }
+        }
+        int submissions = fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal));
+        Check(submissions == 1 && store.LoadSettings().AuthenticationBlocked,
+            "one rejected login persisted before restart");
+
+        using (var second = new ConnectionWorker(new SecureStore(directory), new StartupManager(), fixture.Client))
+        {
+            Check(second.Snapshot.State == ConnectionState.AuthenticationRejected,
+                "restarted worker starts in rejected state");
+            await second.StartAsync(CancellationToken.None);
+            try
+            {
+                await WaitUntil(() => second.Snapshot.ErrorCode == "AuthenticationBlocked",
+                    "restarted worker retains automatic authentication block");
+                Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == submissions,
+                    "restarted worker made no new credential request");
+            }
+            finally { await second.StopAsync(CancellationToken.None); }
+        }
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+static async Task WaitUntil(Func<bool> condition, string message)
+{
+    using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    while (!condition())
+    {
+        if (deadline.IsCancellationRequested) throw new Exception(message);
+        await Task.Delay(25);
+    }
+}
+
 static Task CredentialIdentity()
 {
     string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
@@ -155,6 +271,23 @@ static async Task PartialConnectivity()
     var login = await fixture.Client.LoginAsync("student", "dummy", "telecom", CampusSettings.SupportedPortal, CancellationToken.None);
     Check(login.ReasonCode == "authentication_not_required", "login suppressed");
     Check(fixture.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)), "no credential request");
+}
+
+static Task BoundDnsResponse()
+{
+    const string response = "FFBE818000010002000000000C646574656374706F7274616C0766697265666F7803636F6D0000010001" +
+        "C00C000500010000002D0018076D6F7A696C6C61036D617006666173746C79036E657400" +
+        "C03600010001000000480004C7E8A15B";
+    byte[] reply = Convert.FromHexString(response);
+    var addresses = BoundDnsResolver.ParseResponse(reply, "detectportal.firefox.com", 0xFFBE);
+    Check(addresses.Length == 1 && addresses[0].Equals(IPAddress.Parse("199.232.161.91")),
+        "public CNAME target accepted");
+    reply[^4] = 198; reply[^3] = 18; reply[^2] = 0; reply[^1] = 77;
+    Check(BoundDnsResolver.ParseResponse(reply, "detectportal.firefox.com", 0xFFBE).Length == 0,
+        "virtual fake IP rejected");
+    Check(BoundDnsResolver.ParseResponse(reply, "detectportal.firefox.com", 0x1234).Length == 0,
+        "unmatched transaction rejected");
+    return Task.CompletedTask;
 }
 
 static async Task PortalMismatch()
@@ -209,8 +342,43 @@ static Task Rejection()
     return Task.CompletedTask;
 }
 
+static async Task ServerRetryLimit()
+{
+    using var fixture = new Fixture { RateLimitLogin = true };
+    var result = await fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(!result.Accepted && result.ReasonCode == "portal_rate_limited", "rate limit classified");
+    Check(result.RetryAfter == TimeSpan.FromMinutes(5), "server retry delay capped at five minutes");
+    Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == 1,
+        "one credential request before cooldown");
+}
+
+static async Task StalledLoginTimesOut()
+{
+    using var fixture = new Fixture { StallLogin = true };
+    var result = await fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(!result.Accepted && result.ReasonCode == "authentication_timeout", "stalled request classified as timeout");
+    Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == 1,
+        "timeout did not create another credential request");
+}
+
+static async Task ConcurrentReconnects()
+{
+    using var fixture = new Fixture { DelayLogin = true };
+    var first = fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    var second = fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    var results = await Task.WhenAll(first, second);
+    Check(results.All(result => result.Accepted), "both simulated requests completed");
+    Check(fixture.MaxLoginInFlight == 1, "credential submissions serialized");
+}
+
 static Task RetryBounds()
 {
+    Check(RetryPolicy.GetDelay(1, jitter: 0, retryAfter: TimeSpan.FromMinutes(20)) == TimeSpan.FromMinutes(5),
+        "server requested delay remains bounded at five minutes");
     for (int count = 1; count <= 20; count++)
     {
         var delay = RetryPolicy.GetDelay(count, 1, TimeSpan.FromHours(1));
@@ -234,7 +402,15 @@ sealed class Fixture : IDisposable
     public bool BadPortal { get; set; }
     public bool ChangePathBeforeLogin { get; set; }
     public bool WithoutMobileOption { get; set; }
+    public string? TemplateOverride { get; set; }
     public bool PortalOnline { get; set; }
+    public bool RedirectTemplate { get; set; }
+    public bool RateLimitLogin { get; set; }
+    public bool DelayLogin { get; set; }
+    public bool StallLogin { get; set; }
+    public bool RejectLogin { get; set; }
+    public int MaxLoginInFlight { get; private set; }
+    private int activeLogins;
     public List<Uri> Requests { get; } = [];
     public CampusNetworkClient Client { get; }
 
@@ -252,26 +428,46 @@ sealed class Fixture : IDisposable
     }
     private sealed class FakeHandler(Fixture fixture) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri ?? throw new Exception("missing target");
             fixture.Requests.Add(uri);
+            if (fixture.RedirectTemplate && uri.AbsolutePath.EndsWith("/pc.js", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.Redirect)
+                { Headers = { Location = new Uri("http://example.com/other-template") } };
+            if (fixture.RateLimitLogin && uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
+            {
+                var limited = new HttpResponseMessage((HttpStatusCode)429);
+                limited.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(20));
+                return limited;
+            }
+            if (fixture.DelayLogin && uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
+            {
+                int active = Interlocked.Increment(ref fixture.activeLogins);
+                fixture.MaxLoginInFlight = Math.Max(fixture.MaxLoginInFlight, active);
+                try { await Task.Delay(100, cancellationToken); }
+                finally { Interlocked.Decrement(ref fixture.activeLogins); }
+            }
+            if (fixture.StallLogin && uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             string body = uri.AbsolutePath switch
             {
                 "/connecttest.txt" => fixture.OneProbeSucceeds || fixture.BothProbesSucceed ? "Microsoft Connect Test" : "portal page",
                 "/success.txt" => fixture.BothProbesSucceed ? "success\n" : "portal page",
                 "/" => fixture.BadPortal ? "unexpected page" : Portal,
                 "/eportal/portal/page/loadConfig" => Config,
-                "/eportal/extern/testProgram/testPage/pc.js" => fixture.WithoutMobileOption
-                    ? Template.Replace("<option value=\"@cmcc\">中国移动</option>", "", StringComparison.Ordinal) : Template,
+                "/eportal/extern/testProgram/testPage/pc.js" => fixture.TemplateOverride ??
+                    (fixture.WithoutMobileOption
+                        ? Template.Replace("<option value=\"@cmcc\">中国移动</option>", "", StringComparison.Ordinal) : Template),
                 "/drcom/chkstatus" => fixture.PortalOnline
                     ? "campuspulse({\"result\":1,\"v46ip\":\"10.1.2.3\"})"
                     : "campuspulse({\"result\":0,\"v46ip\":\"10.1.2.3\"})",
                 "/a40.js" => "jsVersion = '4.2.0';",
-                "/eportal/portal/login" => "campuspulse({\"result\":1})",
+                "/eportal/portal/login" => fixture.RejectLogin
+                    ? "campuspulse({\"result\":0,\"ret_code\":1})" : "campuspulse({\"result\":1})",
                 _ => throw new Exception("unexpected target")
             };
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
         }
     }
 }
