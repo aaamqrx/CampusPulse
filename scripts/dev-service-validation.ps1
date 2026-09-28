@@ -88,7 +88,8 @@ switch ($Action) {
                 throw '已有配置缺失或过大；拒绝自动复用。'
             }
             $saved = Get-Content -LiteralPath $settingsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-            if ($saved.ConfigVersion -ne 2 -or $saved.Enabled -isnot [bool] -or $saved.Enabled) {
+            if ($saved.ConfigVersion -ne 2 -or $saved.Enabled -isnot [bool] -or $saved.Enabled -or
+                $saved.StartWithWindows -isnot [bool]) {
                 throw '仅允许复用已暂停自动重连的版本 2 配置。'
             }
         }
@@ -112,12 +113,17 @@ switch ($Action) {
         Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force -ErrorAction Stop
         & icacls.exe $target '/setowner' '*S-1-5-32-544' '/T' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw '设置临时文件所有者失败；服务未注册。' }
-        New-Service -Name $serviceName -BinaryPathName ('"' + $binary + '"') -StartupType Manual -DisplayName 'CampusPulse (validation)' | Out-Null
+        $startupType = if ($PreserveData -and $saved.StartWithWindows) { 'Automatic' } else { 'Manual' }
+        New-Service -Name $serviceName -BinaryPathName ('"' + $binary + '"') -StartupType $startupType -DisplayName 'CampusPulse (validation)' | Out-Null
+        if ($startupType -eq 'Automatic') {
+            & sc.exe config $serviceName start= delayed-auto | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw '设置已保存的延迟自动启动状态失败。' }
+        }
         Start-Service -Name $serviceName -ErrorAction Stop
         (Get-Service -Name $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
         Assert-OurService (Get-ProductService)
         if ($PreserveData) {
-            Write-Host '临时后台服务已启动（手动启动）；已保留原有配置与凭据，未生成安装包。'
+            Write-Host '临时后台服务已启动；已保留原有配置与凭据，启动类型按已保存的开机选项设置，未生成安装包。'
         }
         else {
             Write-Host '临时后台服务已启动（手动启动）；未填写账号密码，也未生成安装包。'
