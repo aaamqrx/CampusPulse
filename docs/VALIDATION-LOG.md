@@ -113,7 +113,7 @@
 - **开机类型差异与修正**。重新注册脚本最初一律创建 Manual 服务，而保留的数据中 `StartWithWindows=true`；后续保存无人值守配置时，后台按保存值把服务改为延迟自动启动。复核 `sc.exe qc CampusPulse` 为 `AUTO_START (DELAYED)`，注册表 `DelayedAutoStart=1`，管道回读 `StartWithWindows=true`、`ActualStartWithWindows=true`，自动重连仍 `Enabled=false`。已修正 `scripts/dev-service-validation.ps1 -Action Install -PreserveData`：重装前验证开机选项为布尔值，注册时按其设定 Manual 或延迟自动启动。修订后 PowerShell 解析、`-Action Status`、仓库结构检查均退出码 0；`scripts/check-dev.ps1` 再次完成四项目 0 警告/错误构建与 24/24 离线检查。修订脚本的管理员重装分支尚未再次执行；当前系统已校正，不能把这次状态变化记为 BOOT-02/03 完整验收。
 - **次日真实认证前预检**。再次以管理员权限仅发送 `status`，回读 `Enabled=false`、`HasPassword=true`、状态 Paused、`StartWithWindows=true`、`ActualStartWithWindows=true`、`UnattendedMode=false`、`KeepingAwake=false`；`powercfg /requests` 没有 CampusPulse 项。`scripts/dev-service-validation.ps1 -Action Status` 回读服务 Running/Auto。没有读取账号密码，也没有发送 `check`、`reconnect` 或认证请求。脚本与电源验收文档提交 `e8faf4e76cc6b5cca0f1dcc5ac6aa145a36c986c` 已推送，`git ls-remote origin refs/heads/main` 返回同一哈希。明早仍须重新读取现场状态，当前预检不能替代真实认证结果。
 
-## 2026-09-29：新门户入口与 gzip 脚本排障（`0.1.0-preview.1`，本地改动）
+## 2026-09-29：新门户入口与 gzip 脚本排障（`0.1.0-preview.1`，源码提交 `93c2fe6`）
 
 - **用户现场失败：未认证**。08:38 至 08:43 正式窗口重复显示“门户内容或认证配置不受支持，未继续提交凭据”，没有成功重连记录。用户随后关闭并保存自动重连；一度拔出网线，诊断确认当时无物理有线路径，重新接回后继续。该日志不能证明曾提交密码。
 - **只读门户定位**。绑定当前物理以太网接口执行 `.local/route-diagnostic/` 的只读检查：旧 `10.62.164.14` 首页与状态路径均返回 451 字节跳转页，缺少 Dr.COM 标识，指向 `10.62.164.38/a79.htm`；仅记录目标主机、静态路径及参数名，没有记录动态参数值。用户浏览器截图也显示新地址的登录页及中国电信选项。以 `http://10.62.164.38/` 为首页时，配置和选中运营商模板校验通过，状态为 `authentication_required`，公网两项探测未通过；没有发起认证。
@@ -125,6 +125,7 @@
 - **网卡事件低频保护：通过离线检查**。发现旧 `ConnectionWorker` 在任何网络变化事件中取消当前检查，并可能在下一次计划时间前重复检测。修正为不因事件取消在途检查，普通网络事件须等待已排定的下次检测时间；用户主动点“立即检测/重连”仍可即时执行。新增模拟事件突发检查，连续五次网络变化通知后没有提前发起网络请求。单独运行测试项目 27/27 通过。该模拟检查不能代替跨夜现场观察。
 - **构建失败后复查通过**。网卡事件修正后首次 `powershell -NoProfile -File scripts/check-dev.ps1` 因设置窗口进程占用 App 的 Core DLL 报 `MSB3027`/`MSB3021`，退出码 1；只结束核对为 CampusPulse 设置窗口的进程，后台服务未停止。随后重跑该命令，Core、Service、App、Tests 的 Release 构建均为 0 警告、0 错误，27/27 离线检查通过，退出码 0。
 - **再次刷新临时后台**。以当前源码重新发布自包含服务到忽略目录，管理员 `-Action Refresh` 成功；程序目录中的 Service/Core DLL SHA-256 均与新副本相同，`-Action Status` 回读 Running/Auto。刷新前脚本核对版本 2 且自动重连关闭；刷新后受限管道回读 `Enabled=false`、`HasPassword=true`、`PortalUrl=http://10.62.164.38/`，上午的 `LastSuccess` 仍在。此次刷新未发送认证，也未生成最终安装包。下一项是开启自动重连和插电无人值守后观察自然跨夜恢复；目前没有该项通过证据。
+- **公开源码同步：通过**。只暂存 12 个源码、脚本和文档路径，`git diff --cached --check` 退出码 0，未包含 `.local/` 诊断文件、`.tools/`、`artifacts/` 或本机数据。提交 `93c2fe6d959522ddcbcc3d41829175db57ac872d` 并推送公开 `origin main`，`git ls-remote origin refs/heads/main` 回读同一哈希。此项仅证明源码和验收记录已同步；没有发布安装包或 GitHub Release。
 
 ## 后续记录格式
 
