@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -165,11 +166,19 @@ public sealed class CampusNetworkClient : IDisposable
         if (response.Content.Headers.ContentLength is { } length && length > maximumBytes)
             throw new FormatException("response_too_large");
         await using var source = await response.Content.ReadAsStreamAsync(token);
+        string[] encodings = response.Content.Headers.ContentEncoding.ToArray();
+        if (encodings.Length > 1 || encodings.Length == 1 &&
+            !string.Equals(encodings[0], "gzip", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(encodings[0], "identity", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException("unsupported_content_encoding");
+        await using Stream decoded = encodings.Length == 1 &&
+            string.Equals(encodings[0], "gzip", StringComparison.OrdinalIgnoreCase)
+            ? new GZipStream(source, CompressionMode.Decompress, leaveOpen: true) : source;
         using var bytes = new MemoryStream();
         var buffer = new byte[4096];
         while (true)
         {
-            int read = await source.ReadAsync(buffer, token);
+            int read = await decoded.ReadAsync(buffer, token);
             if (read == 0) break;
             if (bytes.Length + read > maximumBytes) throw new FormatException("response_too_large");
             bytes.Write(buffer, 0, read);
@@ -238,18 +247,18 @@ public sealed class CampusNetworkClient : IDisposable
     }
 
     private static NetworkCheckResult NoPath() => new(false, false, false, "未能确认校园有线路径，请检查网线、地址及 VPN 路由") { ReasonCode = "network_path_unconfirmed" };
-    private static bool IsExpectedNetworkFailure(Exception e) => e is HttpRequestException or IOException or SocketException or
+    private static bool IsExpectedNetworkFailure(Exception e) => e is HttpRequestException or IOException or InvalidDataException or SocketException or
         JsonException or FormatException or RegexMatchTimeoutException or InvalidOperationException or KeyNotFoundException;
     private static string FailureCode(Exception e) => e switch
     {
         RateLimitedException => "portal_rate_limited",
-        FormatException or JsonException or RegexMatchTimeoutException or KeyNotFoundException => "portal_unrecognized",
+        FormatException or InvalidDataException or JsonException or RegexMatchTimeoutException or KeyNotFoundException => "portal_unrecognized",
         _ => "network_request_failed"
     };
     private static string FailureMessage(Exception e) => e switch
     {
         RateLimitedException => "校园门户暂时繁忙，等待下次检查",
-        FormatException or JsonException or RegexMatchTimeoutException or KeyNotFoundException => "门户内容或认证配置不受支持，未继续提交凭据",
+        FormatException or InvalidDataException or JsonException or RegexMatchTimeoutException or KeyNotFoundException => "门户内容或认证配置不受支持，未继续提交凭据",
         _ => "网络或校园门户暂时不可达，等待下次检查"
     };
 

@@ -1,4 +1,7 @@
 using System.Net;
+using System.IO.Compression;
+using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using CampusPulse.Core;
 using CampusPulse.Service;
@@ -20,6 +23,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-10 one successful probe prevents authentication", PartialConnectivity),
     ("NET-10 Ethernet DNS accepts a public CNAME target and rejects fake IP", BoundDnsResponse),
     ("NET-09 portal identity mismatch prevents authentication", PortalMismatch),
+    ("NET-09 gzip portal script is decoded before authentication", GzipPortalScript),
+    ("NET-09 oversized gzip portal script prevents authentication", OversizedGzipPortalScript),
     ("NET-02 valid portal permits one login request", LoginOnce),
     ("NET-01 verified internet skips portal and login", AlreadyOnline),
     ("NET-08 HTTP 200 with portal content is not internet", PortalContentIsNotInternet),
@@ -28,6 +33,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-05 server retry limit is bounded", ServerRetryLimit),
     ("NET-11 stalled login times out without reporting success", StalledLoginTimesOut),
     ("NET-11 concurrent reconnects serialize credential requests", ConcurrentReconnects),
+    ("NET-05 network change bursts keep the retry interval", NetworkEventBurstKeepsInterval),
     ("NET-05 retry delay remains bounded", RetryBounds)
 };
 int failed = 0;
@@ -221,6 +227,39 @@ static async Task WorkerRestartKeepsRejection()
     finally { Directory.Delete(directory, recursive: true); }
 }
 
+static async Task NetworkEventBurstKeepsInterval()
+{
+    string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SecureStore(directory);
+        store.SaveSettings(new CampusSettings { Enabled = true });
+        using var fixture = new Fixture { BothProbesSucceed = true };
+        using var worker = new ConnectionWorker(store, new StartupManager(), fixture.Client);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntil(() => worker.Snapshot.State == ConnectionState.Online &&
+                worker.Snapshot.NextCheck is { } next && next > DateTimeOffset.UtcNow,
+                "initial check schedules the next interval");
+            int requests = fixture.Requests.Count;
+            var change = typeof(ConnectionWorker).GetMethod("OnNetworkChanged",
+                BindingFlags.NonPublic | BindingFlags.Instance)!;
+            for (int i = 0; i < 5; i++)
+            {
+                change.Invoke(worker, [null, EventArgs.Empty]);
+                await Task.Delay(40);
+            }
+            await Task.Delay(250);
+            Check(fixture.Requests.Count == requests,
+                "network change burst did not start an early automatic check");
+        }
+        finally { await worker.StopAsync(CancellationToken.None); }
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
 static async Task WaitUntil(Func<bool> condition, string message)
 {
     using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -298,13 +337,33 @@ static async Task PortalMismatch()
     Check(fixture.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)), "no credential request");
 }
 
+static async Task GzipPortalScript()
+{
+    using var fixture = new Fixture { GzipScript = true };
+    var result = await fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(result.Accepted, "gzip script version decoded");
+    Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == 1,
+        "one simulated login after gzip validation");
+}
+
+static async Task OversizedGzipPortalScript()
+{
+    using var fixture = new Fixture { GzipScript = true, ScriptOverride = new string('x', 600_000) };
+    var result = await fixture.Client.LoginAsync("student", "dummy", "telecom",
+        CampusSettings.SupportedPortal, CancellationToken.None);
+    Check(result.ReasonCode == "portal_unrecognized", "decompressed size limit enforced");
+    Check(fixture.Requests.All(uri => !uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)),
+        "oversized script cannot authorize credential submission");
+}
+
 static async Task LoginOnce()
 {
     using var fixture = new Fixture();
     var result = await fixture.Client.LoginAsync("student", "dummy", "telecom", CampusSettings.SupportedPortal, CancellationToken.None);
     Check(result.Accepted && result.ReasonCode == "authentication_accepted", "accepted is not internet verified");
     Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == 1, "one login request");
-    Check(fixture.Requests.All(uri => uri.Host is "10.62.164.14" or "www.msftconnecttest.com" or "detectportal.firefox.com"), "fixed hosts");
+    Check(fixture.Requests.All(uri => uri.Host is "10.62.164.38" or "www.msftconnecttest.com" or "detectportal.firefox.com"), "fixed hosts");
 }
 
 static async Task AlreadyOnline()
@@ -314,7 +373,7 @@ static async Task AlreadyOnline()
     Check(check.InternetAvailable && check.ReasonCode == "internet_verified", "both probes verified");
     var login = await fixture.Client.LoginAsync("student", "dummy", "telecom", CampusSettings.SupportedPortal, CancellationToken.None);
     Check(login.ReasonCode == "authentication_not_required", "login skipped");
-    Check(fixture.Requests.All(uri => uri.Host != "10.62.164.14"), "portal not contacted");
+    Check(fixture.Requests.All(uri => uri.Host != "10.62.164.38"), "portal not contacted");
 }
 
 static async Task PortalContentIsNotInternet()
@@ -409,6 +468,8 @@ sealed class Fixture : IDisposable
     public bool DelayLogin { get; set; }
     public bool StallLogin { get; set; }
     public bool RejectLogin { get; set; }
+    public bool GzipScript { get; set; }
+    public string? ScriptOverride { get; set; }
     public int MaxLoginInFlight { get; private set; }
     private int activeLogins;
     public List<Uri> Requests { get; } = [];
@@ -450,6 +511,18 @@ sealed class Fixture : IDisposable
             }
             if (fixture.StallLogin && uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            if (fixture.GzipScript && uri.AbsolutePath == "/a40.js")
+            {
+                using var compressed = new MemoryStream();
+                using (var gzip = new GZipStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    byte[] script = Encoding.UTF8.GetBytes(fixture.ScriptOverride ?? "jsVersion = '4.2.0';");
+                    gzip.Write(script);
+                }
+                var content = new ByteArrayContent(compressed.ToArray());
+                content.Headers.ContentEncoding.Add("gzip");
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+            }
             string body = uri.AbsolutePath switch
             {
                 "/connecttest.txt" => fixture.OneProbeSucceeds || fixture.BothProbesSucceed ? "Microsoft Connect Test" : "portal page",

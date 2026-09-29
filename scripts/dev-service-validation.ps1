@@ -168,6 +168,16 @@ switch ($Action) {
             $_.Extension -in @('.pfx', '.p12', '.pem', '.key', '.log')
         })
         if ($unexpectedData.Count) { throw '临时程序目录含用户数据或敏感文件；拒绝备份和刷新。' }
+        Assert-ProductPath -Path $data -Expected (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'CampusPulse')
+        $settingsFile = Join-Path $data 'settings.json'
+        if (-not (Test-Path -LiteralPath $settingsFile -PathType Leaf) -or
+            (Get-Item -LiteralPath $settingsFile).Length -gt 16384) {
+            throw '当前配置缺失或过大；拒绝刷新临时后台。'
+        }
+        $saved = Get-Content -LiteralPath $settingsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if ($saved.ConfigVersion -ne 2 -or $saved.Enabled -isnot [bool] -or $saved.Enabled) {
+            throw '仅允许在已暂停自动重连的版本 2 配置下刷新临时后台。'
+        }
         $originalStartup = $service.StartMode
         $wasRunning = $service.State -eq 'Running'
         if ($service.State -notin @('Running', 'Stopped')) { throw '服务正在改变状态，请稍后重试。' }

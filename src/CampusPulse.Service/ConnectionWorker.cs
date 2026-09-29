@@ -61,7 +61,6 @@ internal sealed class ConnectionWorker : BackgroundService
 
     private void OnNetworkChanged(object? sender, EventArgs args)
     {
-        CancelCurrent();
         Interlocked.Or(ref triggers, 1);
         Wake();
     }
@@ -206,6 +205,10 @@ internal sealed class ConnectionWorker : BackgroundService
             bool explicitReconnect = (reason & 4) != 0;
             bool readonlyCheck = !explicitReconnect && (reason & 2) != 0;
             if (!explicitReconnect && !readonlyCheck && !settings.Enabled) continue;
+            // Network change notifications can arrive in bursts from unrelated adapters.
+            // They must not bypass the scheduled retry interval or cancel an in-flight check.
+            if (!explicitReconnect && !readonlyCheck && nextCheck is { } scheduled &&
+                DateTimeOffset.UtcNow < scheduled) continue;
             await operations.WaitAsync(stop);
             using var operation = CancellationTokenSource.CreateLinkedTokenSource(stop);
             operation.CancelAfter(TimeSpan.FromSeconds(95));

@@ -113,6 +113,19 @@
 - **开机类型差异与修正**。重新注册脚本最初一律创建 Manual 服务，而保留的数据中 `StartWithWindows=true`；后续保存无人值守配置时，后台按保存值把服务改为延迟自动启动。复核 `sc.exe qc CampusPulse` 为 `AUTO_START (DELAYED)`，注册表 `DelayedAutoStart=1`，管道回读 `StartWithWindows=true`、`ActualStartWithWindows=true`，自动重连仍 `Enabled=false`。已修正 `scripts/dev-service-validation.ps1 -Action Install -PreserveData`：重装前验证开机选项为布尔值，注册时按其设定 Manual 或延迟自动启动。修订后 PowerShell 解析、`-Action Status`、仓库结构检查均退出码 0；`scripts/check-dev.ps1` 再次完成四项目 0 警告/错误构建与 24/24 离线检查。修订脚本的管理员重装分支尚未再次执行；当前系统已校正，不能把这次状态变化记为 BOOT-02/03 完整验收。
 - **次日真实认证前预检**。再次以管理员权限仅发送 `status`，回读 `Enabled=false`、`HasPassword=true`、状态 Paused、`StartWithWindows=true`、`ActualStartWithWindows=true`、`UnattendedMode=false`、`KeepingAwake=false`；`powercfg /requests` 没有 CampusPulse 项。`scripts/dev-service-validation.ps1 -Action Status` 回读服务 Running/Auto。没有读取账号密码，也没有发送 `check`、`reconnect` 或认证请求。脚本与电源验收文档提交 `e8faf4e76cc6b5cca0f1dcc5ac6aa145a36c986c` 已推送，`git ls-remote origin refs/heads/main` 返回同一哈希。明早仍须重新读取现场状态，当前预检不能替代真实认证结果。
 
+## 2026-09-29：新门户入口与 gzip 脚本排障（`0.1.0-preview.1`，本地改动）
+
+- **用户现场失败：未认证**。08:38 至 08:43 正式窗口重复显示“门户内容或认证配置不受支持，未继续提交凭据”，没有成功重连记录。用户随后关闭并保存自动重连；一度拔出网线，诊断确认当时无物理有线路径，重新接回后继续。该日志不能证明曾提交密码。
+- **只读门户定位**。绑定当前物理以太网接口执行 `.local/route-diagnostic/` 的只读检查：旧 `10.62.164.14` 首页与状态路径均返回 451 字节跳转页，缺少 Dr.COM 标识，指向 `10.62.164.38/a79.htm`；仅记录目标主机、静态路径及参数名，没有记录动态参数值。用户浏览器截图也显示新地址的登录页及中国电信选项。以 `http://10.62.164.38/` 为首页时，配置和选中运营商模板校验通过，状态为 `authentication_required`，公网两项探测未通过；没有发起认证。
+- **gzip 原因与修复**。新主机 `/a40.js` 返回 HTTP 200、`Content-Encoding: gzip`；原客户端把压缩字节当文本，版本解析报 `portal_parameter_missing`。新增单层 gzip 解码，继续按解压后字节数执行 512 KiB 限制，并将损坏压缩数据归类为不受支持。修复后只读解析到脚本版本 `4.2.1`。离线新增有效 gzip 和解压超限阻断两个用例；没有用真实账号或假密码访问真实接口。原始脚本与诊断程序仅存于忽略目录 `.local/`。
+- **构建与离线检查**。首次 `powershell -NoProfile -File scripts/check-dev.ps1` 因正式窗口进程占用 App 的 Core DLL 报 `MSB3027`/`MSB3021`，退出码 1；用户关闭设置窗口后重跑，四项目 Release 构建均为 0 警告、0 错误，26/26 离线检查通过，退出码 0。独立的只读新门户检查确认脚本版本可解析。构建和只读检查均不等于真实登录。
+- **临时后台刷新**。刷新脚本新增版本 2、`Enabled=false` 的管理员前置核对。运行 `.tools/dotnet/dotnet.exe publish src/CampusPulse.Service/CampusPulse.Service.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false --output .local/service-validation-20260927/Service`，退出码 0，源目录敏感文件数量 0。管理员执行 `scripts/dev-service-validation.ps1 -Action Refresh` 成功并保留现有数据和启动类型；`-Action Status` 回读服务 Running/Auto，安装位置 Core DLL 与新副本 SHA-256 相同。未运行安装器，未认证或执行跨夜恢复。
+- **手动认证前置项**。用户当时需在正式窗口把已保存的旧门户改为 `http://10.62.164.38/` 并在本机重输密码；只读检查明确要求认证后，才人工点一次“立即重连”并以独立公网探测验收。网页显示登录表单和代码识别门户均不是登录成功证据；下条记录为完成后的验收结果。
+- **真实账号单次手动认证：通过**。用户在正式 WPF 窗口将门户改为 `http://10.62.164.38/`，在本机重新输入密码，保持自动重连关闭并保存；“立即检测”后后台于 09:22:55 显示“检测到需要认证；本次仅检测，没有提交密码”。用户随后点击一次“立即重连”；管理员只读 `status` 回读 09:23:45“正在进行一次校园账号认证”，09:23:54“校园有线网络已通过两个公网探测”。另用 `.local/route-diagnostic/` 对同一物理以太网执行只读检查，结果 `internet_verified`、`InternetAvailable=True`。后台回读 `Enabled=false`、`HasPassword=true`、新门户地址及上次公网成功时间。证据：用户操作确认、受限管道脱敏事件和独立有线检查输出；未读取、输出或保存真实密码，也没有第二次认证请求。此项证明一次人工触发的真实认证和公网恢复，不能证明自动恢复、跨夜或安装包可用。
+- **网卡事件低频保护：通过离线检查**。发现旧 `ConnectionWorker` 在任何网络变化事件中取消当前检查，并可能在下一次计划时间前重复检测。修正为不因事件取消在途检查，普通网络事件须等待已排定的下次检测时间；用户主动点“立即检测/重连”仍可即时执行。新增模拟事件突发检查，连续五次网络变化通知后没有提前发起网络请求。单独运行测试项目 27/27 通过。该模拟检查不能代替跨夜现场观察。
+- **构建失败后复查通过**。网卡事件修正后首次 `powershell -NoProfile -File scripts/check-dev.ps1` 因设置窗口进程占用 App 的 Core DLL 报 `MSB3027`/`MSB3021`，退出码 1；只结束核对为 CampusPulse 设置窗口的进程，后台服务未停止。随后重跑该命令，Core、Service、App、Tests 的 Release 构建均为 0 警告、0 错误，27/27 离线检查通过，退出码 0。
+- **再次刷新临时后台**。以当前源码重新发布自包含服务到忽略目录，管理员 `-Action Refresh` 成功；程序目录中的 Service/Core DLL SHA-256 均与新副本相同，`-Action Status` 回读 Running/Auto。刷新前脚本核对版本 2 且自动重连关闭；刷新后受限管道回读 `Enabled=false`、`HasPassword=true`、`PortalUrl=http://10.62.164.38/`，上午的 `LastSuccess` 仍在。此次刷新未发送认证，也未生成最终安装包。下一项是开启自动重连和插电无人值守后观察自然跨夜恢复；目前没有该项通过证据。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

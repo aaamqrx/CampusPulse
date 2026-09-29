@@ -2,7 +2,7 @@ namespace CampusPulse.Core;
 
 public sealed record CampusSettings
 {
-    public const string SupportedPortal = "http://10.62.164.14/";
+    public const string SupportedPortal = "http://10.62.164.38/";
     public int ConfigVersion { get; init; } = 2;
     public bool Enabled { get; init; }
     public bool StartWithWindows { get; init; } = true;

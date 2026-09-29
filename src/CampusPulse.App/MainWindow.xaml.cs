@@ -192,7 +192,7 @@ public partial class MainWindow : Window
         var username = UsernameBox.Text.Trim();
         if (!PortalEndpoint.TryCreate(PortalBox.Text, out var portal))
         {
-            Feedback("请输入校内 HTTP IPv4 门户首页地址，例如 http://10.62.164.14/。", true);
+            Feedback("请输入校内 HTTP IPv4 门户首页地址，例如 http://10.62.164.38/。", true);
             return;
         }
         var carrier = CarrierBox.SelectedValue as string;

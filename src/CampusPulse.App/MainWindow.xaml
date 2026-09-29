@@ -79,7 +79,7 @@
                             <StackPanel x:Name="SettingsForm">
                                 <Label Content="校园网登录地址" Target="{Binding ElementName=PortalBox}" Padding="0" Margin="0,0,0,6" />
                                 <TextBox x:Name="PortalBox" MaxLength="256" TextChanged="FieldChanged" AutomationProperties.Name="校园网登录地址" />
-                                <TextBlock Style="{StaticResource Description}" Text="填写校内 HTTP IPv4 首页，例如 http://10.62.164.14/；不支持路径、账号参数或其他协议。" Margin="0,5,0,13" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource Description}" Text="填写校内 HTTP IPv4 首页，例如 http://10.62.164.38/；不支持路径、账号参数或其他协议。" Margin="0,5,0,13" TextWrapping="Wrap" />
                                 <Label Content="运营商" Target="{Binding ElementName=CarrierBox}" Padding="0" Margin="0,0,0,6" />
                                 <ComboBox x:Name="CarrierBox" SelectedValuePath="Tag" SelectedIndex="2" SelectionChanged="FieldChanged" AutomationProperties.Name="运营商">
                                     <ComboBoxItem Content="中国联通" Tag="unicom" />
