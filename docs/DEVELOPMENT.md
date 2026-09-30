@@ -128,7 +128,7 @@ HTTP 客户端和时钟可以替换为测试实现。离线测试可覆盖错误
 
 0.1 版采用 LocalSystem 服务身份，以便在登录前运行并管理自身启动类型。这个身份权限较大，因此服务只接受固定命令，网络目标和文件位置使用明确的允许范围，不提供执行任意命令、加载外部脚本或读写任意路径的接口。后续若拆出受限权限服务，应重新设计权限边界。
 
-服务崩溃由 Windows 恢复策略有限重启；连续启动失败应停止循环并记录原因。配置损坏或凭据不可解密时，以暂停状态启动，不能启动失败后反复盲目认证。
+服务崩溃由 Windows 恢复策略有限重启：依次等待 5、15、60 秒，第四项为不操作（NONE），无故障 86400 秒后重置计数。Windows 会重复列表末项，所以不能以重启作为末项。配置损坏或凭据不可解密时，以暂停状态启动，不能启动失败后反复盲目认证。
 
 ### 4.3 App：管理员设置与状态
 
@@ -237,7 +237,7 @@ flowchart TD
 - `credentials.dat`：Windows DPAPI 加密的账号与密码绑定记录。更换账号时必须重新输入密码，不能把旧密码隐式用于新账号。
 - `events.json`：最多 80 条脱敏事件，记录时间、固定状态与原因。持久化的上次公网成功时间可随此记录恢复。
 
-JSON 写入采用同目录临时文件与原子替换，临时文件继承同样严格的权限。配置、凭据和系统启动类型涉及多处修改时，必须先校验全部输入；任何一步失败要回退到一致配置或返回明确失败，不能显示“已保存”但实际只生效一半。读取时用配置版本和账号绑定验证一致性，不一致则暂停。
+JSON 写入采用同目录临时文件与原子替换，临时文件继承同样严格的权限。配置、凭据和系统启动类型涉及多处修改时，必须先校验全部输入；任何一步失败要回退到一致配置或返回明确失败，不能显示“已保存”但实际只生效一半。回滚时不重写内容未变的文件；即使配置恢复失败，也必须尝试凭据恢复，避免文件占用阻断旧凭据回滚。读取时用配置版本和账号绑定验证一致性，不一致则暂停。
 
 日志避免每轮重复落盘，优先记录状态变化、关键操作和错误分类；保留最近 80 条且最长 7 天，按先达到的限制清理。界面可复制这些脱敏事件，不导出原始配置或通信内容。禁止保存明文密码、完整查询 URL、原始 HTTP 响应、终端 MAC、个人内网地址或可复用会话信息。清除凭据不等于退出校园网，首版不提供自动注销操作。
 
@@ -317,6 +317,7 @@ JSON 写入采用同目录临时文件与原子替换，临时文件继承同样
 - [.NET 长期支持政策](https://dotnet.microsoft.com/en-us/platform/support/policy)
 - [使用 .NET 创建 Windows Service](https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service)
 - [服务与交互界面分离](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services)
+- [服务恢复列表末项会被重复执行](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actionsw)
 - [DPAPI 保护范围](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.dataprotectionscope?view=net-10.0)
 - [Windows 电源请求行为与释放要求](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest)
 - [.NET 自包含发布](https://learn.microsoft.com/en-us/dotnet/core/deploying/)

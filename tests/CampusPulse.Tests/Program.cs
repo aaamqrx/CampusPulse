@@ -18,6 +18,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-09 custom supported portal keeps all credential requests on chosen host", CustomPortal),
     ("NET-09 redirected template refuses credential submission", RedirectedTemplate),
     ("SEC-03 old credentials pause and new credentials bind to carrier and portal", CredentialIdentity),
+    ("SEC-02/03 replacement and clearing keep passwords out of stored plaintext", CredentialReplacementAndClearing),
+    ("CFG-04 failed settings replacement restores previous credential", ConfigurationRollback),
     ("NET-06 blocked authentication survives settings reload", BlockedAuthenticationPersists),
     ("NET-06 rejected authentication remains blocked after worker restart", WorkerRestartKeepsRejection),
     ("NET-10 one successful probe prevents authentication", PartialConnectivity),
@@ -299,6 +301,69 @@ static Task CredentialIdentity()
     {
         Directory.Delete(directory, recursive: true);
     }
+    return Task.CompletedTask;
+}
+
+static Task CredentialReplacementAndClearing()
+{
+    string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SecureStore(directory);
+        var settings = new CampusSettings { Username = "student" };
+        const string first = "FAKE-ONLY-FIRST-password-913";
+        const string second = "FAKE-ONLY-SECOND-password-728";
+        StoredCredential Credential(string password) => new("student", password)
+            { ProtocolVersion = 2, Carrier = settings.Carrier, PortalUrl = settings.PortalUrl };
+        store.SaveConfiguration(settings, Credential(first));
+        store.SaveConfiguration(settings, Credential(second));
+        Check(store.LoadCredential("student", settings.Carrier, settings.PortalUrl)?.Password == second,
+            "replacement returns only new fake password");
+        store.SaveHistory(null, [new(DateTimeOffset.UtcNow, "Configuration saved")]);
+        foreach (string path in Directory.GetFiles(directory))
+        {
+            string bytesAsText = Encoding.UTF8.GetString(File.ReadAllBytes(path));
+            Check(!bytesAsText.Contains(first, StringComparison.Ordinal) &&
+                !bytesAsText.Contains(second, StringComparison.Ordinal), "no fake password in persisted plaintext");
+        }
+        store.SaveConfiguration(settings with { Username = "", Enabled = false }, null, deleteCredential: true);
+        Check(!File.Exists(Path.Combine(directory, "credentials.dat")) &&
+            store.LoadCredential("student", settings.Carrier, settings.PortalUrl) is null,
+            "cleared credential cannot be reloaded");
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+    return Task.CompletedTask;
+}
+
+static Task ConfigurationRollback()
+{
+    string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SecureStore(directory);
+        var settings = new CampusSettings { Username = "student" };
+        StoredCredential Credential(string password) => new("student", password)
+            { ProtocolVersion = 2, Carrier = settings.Carrier, PortalUrl = settings.PortalUrl };
+        store.SaveConfiguration(settings, Credential("dummy-old"));
+        byte[] before = File.ReadAllBytes(Path.Combine(directory, "credentials.dat"));
+        bool failed = false;
+        // Permit reading the old settings, but prevent atomic replacement until rollback finishes.
+        using (var locked = new FileStream(Path.Combine(directory, "settings.json"), FileMode.Open,
+            FileAccess.Read, FileShare.Read))
+        {
+            try { store.SaveConfiguration(settings with { UnattendedMode = true }, Credential("dummy-new")); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { failed = true; }
+        }
+        Check(failed, "locked settings force save failure");
+        Check(store.LoadSettings() == settings, "old settings preserved");
+        Check(File.ReadAllBytes(Path.Combine(directory, "credentials.dat")).SequenceEqual(before) &&
+            store.LoadCredential("student", settings.Carrier, settings.PortalUrl)?.Password == "dummy-old",
+            "old credential restored despite locked unchanged settings");
+        Check(Directory.GetFiles(directory, "*.tmp").Length == 0, "failed transaction leaves no temporary file");
+    }
+    finally { Directory.Delete(directory, recursive: true); }
     return Task.CompletedTask;
 }
 

@@ -191,7 +191,8 @@ begin
     RunServiceCommand('create ' + ServiceName + ' ' + BinaryArgument + ' start= delayed-auto obj= LocalSystem DisplayName= "CampusPulse"', 'Create CampusPulse service');
   end;
   RunServiceCommand('description ' + ServiceName + ' "Campus network connectivity and authentication service"', 'Set service description');
-  RunServiceCommand('failure ' + ServiceName + ' reset= 86400 actions= restart/5000/restart/15000/restart/60000', 'Set service recovery');
+  { SCM repeats the final action. The empty fourth action explicitly means NONE. }
+  RunServiceCommand('failure ' + ServiceName + ' reset= 86400 actions= restart/5000/restart/15000/restart/60000//0', 'Set finite service recovery');
   RunServiceCommand('failureflag ' + ServiceName + ' 1', 'Set service recovery policy');
   if StartServiceAfterInstall then
     RunServiceCommand('start ' + ServiceName, 'Start CampusPulse service');

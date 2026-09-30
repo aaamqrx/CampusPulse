@@ -119,6 +119,10 @@ switch ($Action) {
             & sc.exe config $serviceName start= delayed-auto | Out-Null
             if ($LASTEXITCODE -ne 0) { throw '设置已保存的延迟自动启动状态失败。' }
         }
+        & sc.exe failure $serviceName reset= 86400 actions= 'restart/5000/restart/15000/restart/60000//0' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to configure finite service recovery.' }
+        & sc.exe failureflag $serviceName 1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to configure service failure flag.' }
         Start-Service -Name $serviceName -ErrorAction Stop
         (Get-Service -Name $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
         Assert-OurService (Get-ProductService)

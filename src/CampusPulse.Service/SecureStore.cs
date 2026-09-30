@@ -107,8 +107,10 @@ internal sealed class SecureStore
         }
         catch
         {
-            Restore("settings.json", oldSettings);
-            Restore("credentials.dat", oldCredential);
+            // An unchanged, locked settings file must not prevent credential rollback.
+            // Attempt both restores even if the first restore itself fails.
+            try { Restore("settings.json", oldSettings); }
+            finally { Restore("credentials.dat", oldCredential); }
             throw;
         }
     }
@@ -128,6 +130,9 @@ internal sealed class SecureStore
     private byte[]? ReadOptional(string name) => File.Exists(SafePath(name)) ? File.ReadAllBytes(SafePath(name)) : null;
     private void Restore(string name, byte[]? bytes)
     {
+        byte[]? current = ReadOptional(name);
+        if (bytes is null && current is null || bytes is not null && current is not null &&
+            bytes.AsSpan().SequenceEqual(current)) return;
         if (bytes is null) File.Delete(SafePath(name));
         else AtomicWrite(name, bytes);
     }
