@@ -24,6 +24,7 @@ public static class ProductWindowNative {
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr handle);
+ [DllImport("user32.dll", SetLastError=true)] public static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int width, int height, uint flags);
 }
 '@
 $owned = $null; $failure = $null; $failureLine = $null; $failureCause = $null; $phase = 'Preparation'
@@ -57,17 +58,25 @@ try {
     Start-Sleep -Seconds 2
     $phase = 'Read native handle and DPI'
     $handle = [IntPtr]$window.Current.NativeWindowHandle
+    $null = [ProductWindowNative]::ShowWindow($handle,9)
+    Start-Sleep -Milliseconds 500
     $scale = [ProductWindowNative]::GetDpiForWindow($handle) / 96.0
-    $phase = 'Read transform pattern'
-    $transform = $window.GetCurrentPattern([Windows.Automation.TransformPattern]::Pattern)
     $phase = 'Read window pattern'
     $pattern = $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)
     $phase = 'Resize to minimum'
-    $transform.Resize(900*$scale,680*$scale)
+    # Use the native window operation, then verify actual geometry. The UIA provider
+    # rejected Resize on this host; do not infer a product defect from that provider call.
+    if (-not [ProductWindowNative]::SetWindowPos($handle,[IntPtr]::Zero,0,0,[int][Math]::Ceiling(900*$scale),[int][Math]::Ceiling(680*$scale),0x0016)) {
+        throw 'Native window resize failed'
+    }
     Start-Sleep -Milliseconds 700
-    Record 'Minimum supported window size responds' (-not $owned.HasExited -and $window.Current.BoundingRectangle.Width -ge 900*$scale-2)
+    $bounds = $window.Current.BoundingRectangle
+    Record 'Minimum supported window size responds' (-not $owned.HasExited -and
+        [Math]::Abs($bounds.Width-900*$scale) -le 2 -and [Math]::Abs($bounds.Height-680*$scale) -le 2)
     $phase = 'Resize to default'
-    $transform.Resize(1080*$scale,850*$scale)
+    if (-not [ProductWindowNative]::SetWindowPos($handle,[IntPtr]::Zero,0,0,[int][Math]::Ceiling(1080*$scale),[int][Math]::Ceiling(850*$scale),0x0016)) {
+        throw 'Native window resize failed'
+    }
     $phase = 'Minimize'
     $pattern.SetWindowVisualState([Windows.Automation.WindowVisualState]::Minimized)
     Start-Sleep -Milliseconds 700

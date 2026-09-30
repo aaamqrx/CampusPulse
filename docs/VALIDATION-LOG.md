@@ -174,6 +174,14 @@
 - **PWR-01：监测已开始，结果待回读**。用户明确表示“现在进行”，派发 `watch-local.ps1 -Scenario Idle -IdleSeconds 300 -DurationSeconds 540 -Elevate`。ready 为 21:35:03，首批样本确认插电、后台 Running、三个开关 true、防睡眠状态/请求有效。已提示保持充电器与网线连接、约 6 分钟不操作电脑；未修改电源计划，不触发人工认证。证据 `idle-ready.txt`、`idle-samples.jsonl`，完成后回读 `idle-result.json`，不能把派发退出码 0 当作验收通过。
 - **PWR-01 回读：当前断言未通过，原因待分层核对**。21:41:37 结果 Failure=null、SampleCount=196、AllServiceRunning/PlanUnchanged/IdleReached/ContinuousPluggedInPowerRequest 均 true，最终连续空闲 331.235 秒；StandbyEntryCount=1。系统回读 21:41:06 Kernel-Power 506，原因 Idle Timeout，因此不计为通过。现代待机的 Screen Off 与实际 Sleep 是不同阶段，已查微软官方说明，准备 `inspect-sleep-report.ps1` 生成系统分阶段报告，尚未取得报告，不能先认定产品失效或改判通过。用户已被告知监测结束、可以操作电脑。窗口排查重新派发后仍等新 UAC 确认，后续结果待回读；未改电源计划或开关。
 
+## 2026-09-30 22:01–22:13：系统报告核对与窗口原生验收（`0.1.0-preview.1`，基线 `3c4ae3d`）
+
+- **PWR-01 分阶段补证：此次通过**。`inspect-sleep-report.ps1 -Elevate` 22:01:54 退出码 0，生成仅保存在忽略目录的 SleepStudy XML。仅提取与此次监测重叠的系统阶段：Screen Off 21:41:06 至 21:45:21，进入原因 Video Idle Timeout，覆盖最后空闲样本，没有重叠 Sleep。`interpret-idle-report.ps1` 22:07:46 退出码 0，结合 196 样本、连续空闲 331.235 秒、后台/插电/电源请求持续及电源计划未变，得到 Passed=true。保留原监测的严格事件计数结果，不覆盖为 0；系统报告补证说明 506 并不等同实际睡眠。证据 `idle-sleepstudy-result.json`、`idle-sleepstudy.xml`、`idle-phase-verdict.json`。仅证明此次空闲，不补为跨夜防睡眠或跨设备保证。依据微软 Modern Standby States；公开不上传机器信息或其他应用历史。
+- **窗口调用定位及修正后原生验收：通过已执行部分**。22:01 补诊断回读失败位于 UIA Resize，根异常 InvalidOperationException；退出码 1，后台持续运行，保留 `ui-window-failed-resize.json`。测试脚本改用原生 SetWindowPos 并验证实际几何尺寸，未修改产品源码。22:08:30 至 22:08:38 `validate-ui-window.ps1 -Elevate` 退出码 0，8 个断言全部通过：正式窗口、最小尺寸、最小化、关闭收起、后台 PID 不变、恢复可见、配置/凭据密文不变、界面进程退出后后台继续运行。恢复由 Win32 完成，未把它写成托盘菜单通过。证据 `ui-window-validation.json`。
+- **真实托盘/视觉准备：未完成交互结果**。`inspect-ui.ps1 -KeepOwnWindow -Elevate` 22:13 退出码 0，白名单状态为公网验证通过、后台运行、自启与防睡眠开启，密码控件遮蔽；保留脚本打开的正式窗口供用户操作，未读取账号/密码值。已保存本机文件摘要与进程基线、准备 `verify-ui-manual.ps1`，并提示最小尺寸视觉、关闭/双击托盘、右键打开、右键退出四步；用户结果尚待回复。证据 `ui-inspection.json`、`ui-manual-baseline.json`，不上传本机摘要。相关四个脚本解析检查通过；最终安装包和 Release 未执行。
+- **真实托盘/视觉及退出后回读：本机此次通过**。用户随后确认四步全部正常且已退出界面。22:16:59 `verify-ui-manual.ps1 -Elevate` 退出码 0，TestedInterfaceExited、SameBackgroundRunning、SettingsBytesUnchanged、CredentialBytesUnchanged 均 true。结合用户交互确认，本机当前缩放下的最小尺寸可用、关闭收起、托盘双击/右键打开及退出界面后台继续均通过。证据用户反馈、`ui-manual-after.json`；其他 DPI/机器未验证，未把程序结束脚本冒充真实菜单操作。
+- **SEC-01 另一普通账号检查：已准备，未执行**。`validate-other-user.ps1` 默认入口只显示具体操作计划，退出码 0，PowerShell 解析通过；仅提取并编译其中 C# 身份助手，在 Windows PowerShell 编译成功，没有调用探测或创建账号。执行分支限定新建 CampusPulseAclCheck 普通账号、随机临时密码仅存内存、三份固定文件及固定本机管道的打开/连接尝试、不读内容/不发控制命令，最后按 SID 核对删除该新账号并验证数据及后台未变。因会修改 Windows 用户列表，已向用户请求确认，尚未得到答复；同时询问干净 Windows 测试环境可用性。不能记录为权限验收通过。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。
