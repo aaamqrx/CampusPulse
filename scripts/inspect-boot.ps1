@@ -27,8 +27,13 @@ try {
     if ($Phase -eq 'After') {
         $before = Get-Content -LiteralPath (Join-Path $evidence 'boot-before.json') -Raw | ConvertFrom-Json
         $boot = [DateTime]$os.LastBootUpTime
+        $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        # DWM/UMFD also have interactive sessions at the sign-in screen; exclude them.
         $logons = @(Get-CimInstance Win32_LogonSession -Filter 'LogonType=2 OR LogonType=10' |
-            Where-Object { $_.StartTime -ge $boot } | Sort-Object StartTime)
+            Where-Object { $_.StartTime -ge $boot } | Where-Object {
+                $accounts = @(Get-CimAssociatedInstance -InputObject $_ -Association Win32_LoggedOnUser -ResultClassName Win32_Account)
+                @($accounts | Where-Object { $_.SID -eq $userSid }).Count -gt 0
+            } | Sort-Object StartTime)
         $earliest = if ($logons.Count) { $logons[0].StartTime } else { $null }
         $record.NewBootObserved = $boot -gt [DateTime]$before.BootTime
         $record.EarliestInteractiveLogon = if ($null -ne $earliest) { $earliest.ToString('o') } else { $null }
