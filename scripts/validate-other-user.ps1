@@ -76,7 +76,7 @@ try {
     try {$rng.GetBytes($randomBytes)} finally {$rng.Dispose()}
     $securePassword=ConvertTo-SecureString ('aA9!'+[Convert]::ToBase64String($randomBytes)) -AsPlainText -Force
     [Array]::Clear($randomBytes,0,$randomBytes.Length)
-    $user=New-LocalUser -Name $accountName -Password $securePassword -AccountNeverExpires -Description 'Temporary CampusPulse read-only ACL acceptance; remove after probe'
+    $user=New-LocalUser -Name $accountName -Password $securePassword -AccountNeverExpires -Description 'CampusPulse temporary ACL check'
     $created=$true; $createdSid=$user.SID.Value
     Add-LocalGroupMember -SID ([Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')) -Member $user
     $passwordPointer=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)

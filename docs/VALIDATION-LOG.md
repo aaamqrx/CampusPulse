@@ -182,6 +182,14 @@
 - **真实托盘/视觉及退出后回读：本机此次通过**。用户随后确认四步全部正常且已退出界面。22:16:59 `verify-ui-manual.ps1 -Elevate` 退出码 0，TestedInterfaceExited、SameBackgroundRunning、SettingsBytesUnchanged、CredentialBytesUnchanged 均 true。结合用户交互确认，本机当前缩放下的最小尺寸可用、关闭收起、托盘双击/右键打开及退出界面后台继续均通过。证据用户反馈、`ui-manual-after.json`；其他 DPI/机器未验证，未把程序结束脚本冒充真实菜单操作。
 - **SEC-01 另一普通账号检查：已准备，未执行**。`validate-other-user.ps1` 默认入口只显示具体操作计划，退出码 0，PowerShell 解析通过；仅提取并编译其中 C# 身份助手，在 Windows PowerShell 编译成功，没有调用探测或创建账号。执行分支限定新建 CampusPulseAclCheck 普通账号、随机临时密码仅存内存、三份固定文件及固定本机管道的打开/连接尝试、不读内容/不发控制命令，最后按 SID 核对删除该新账号并验证数据及后台未变。因会修改 Windows 用户列表，已向用户请求确认，尚未得到答复；同时询问干净 Windows 测试环境可用性。不能记录为权限验收通过。
 
+## 2026-09-30 22:31–22:40：普通账号权限及两次开机准备（`0.1.0-preview.1`，基线 `236a250`）
+
+- **公开源码回读**：上一阶段提交 `236a250c04196f01185799128e5bc0e18c90a77f` 推送 `origin main` 退出码 0，`ls-remote` 与本地 HEAD 一致，工作区当时干净。仅源码和脱敏记录；未上传系统报告、文件摘要或安装包。
+- **SEC-01 首次执行失败，未创建账号**。用户明确授权临时普通账号并立即清理。第一次 `validate-other-user.ps1 -Execute -Elevate` 退出码 1，ParameterBindingValidationException，TemporaryUserCreated=false；配置/凭据及后台未变。系统命令元数据确认 Description 长度上限 48，原脚本描述超限。只读确认账号不存在，缩短描述并保留 `other-user-before-description-fix.json`，不是产品权限失败。
+- **SEC-01 重跑：通过**。22:32:30 同一已授权范围执行，退出码 0，Failure=null；临时普通账号创建和删除均 true，身份及三份文件/管道拒绝五断言全 true。采用固定本地身份 network logon，无用户配置文件；仅尝试打开文件/连接本机管道，没有读取内容或发送命令。配置及加密凭据字节未变、同一后台 PID Running；额外只读确认测试账号已不存在。证据 `other-user-validation.json`，密码随机生成且未输出/持久化，未涉及真实校园密码。
+- **环境边界**：用户明确目前没有干净 Windows 虚拟机或其他测试电脑，干净机器安装验证暂缺，不把本机开发环境写成干净机器。不据此宣称安装生命周期或 Release 完成。
+- **BOOT 两次准备：仅第一步已执行**。用户明确愿意现在配合两次重启。新 `validate-boot-cycle.ps1` 解析及默认无变更计划通过。22:38:59 Disable 执行退出码 0，保存原三个开关、凭据摘要及重启前基线，仅关闭自启，服务 Running/Manual；未由代理重启。22:40:48 只读回读 StartWithWindows/ActualStartWithWindows=false、Enabled/UnattendedMode=true、HasPassword=true、防睡眠有效、State=Online。证据 `boot-cycle-disable.json`、`boot-disabled-before.json`、`inspection-before-disabled-boot.json`。当前需用户首次重启后先回读 Stopped/Manual，再从正式界面手动启动；原自启尚未恢复，第二次重启及登录前证据未执行。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。
