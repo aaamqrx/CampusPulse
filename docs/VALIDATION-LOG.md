@@ -132,6 +132,7 @@
 - **用户操作与反馈：按本次范围接受**。用户明确表示“自动重连和跨夜恢复验证成功”，并说明只有这一晚在学校，要求按这一晚完成跨夜验收。场景为 2026-09-29 至 09-30 的自然跨夜运行；用户未提供具体断网、开始认证或公网恢复时刻。证据位置：本次对话的用户现场反馈；本轮没有读取后台脱敏事件、独立有线公网探测或系统电源请求，因此这些细项标为未验证。不能将本条写成两晚、无人值守电源请求持续整夜或独立检查通过。
 - **验收门槛调整**。用户决定首个预览版接受这一晚作为校园实测样本，不再安排第二晚或受控认证失效测试；公开说明须写明仅 1 晚、用户现场确认及缺少事件回读。此决定不替代开机自启、三开关、凭据权限、服务生命周期、安装/升级/卸载等本机验收，也不证明多夜可靠性。
 - **本轮文档维护与只读服务检查**。同步 `AGENTS.md` 当前门户、`README.md` 状态摘要、`docs/HANDOFF.md` 下一阶段与证据边界、`docs/TESTING-AND-RELEASE.md` 首个预览版跨夜标准及本记录。普通命令环境多次返回 `helper_unknown_error: setup refresh had errors`；改用经审核的只读命令回读项目文件与 Git 状态，未把工具故障写为产品故障。运行 `powershell -NoProfile -File scripts/dev-service-validation.ps1 -Action Status`，退出码 0，回读临时服务 Running/Auto、临时程序副本和正式界面 DLL 存在；这不证明跨夜认证时间线或实时开关状态。文档差异检查 `git diff --check` 退出码 0。未运行新构建、离线测试、真实认证或安装器；本轮 GitHub 同步以最终远端回读为准。
+- **文档提交与首次远端回读：通过**。提升后的 Git 首次因仓库所有者是沙盒身份而拒绝 `status`；后续仅对本命令使用 `-c safe.directory=E:/Projects/01_CampusPulse`，未修改全局 Git 信任设置。暂存范围只有 `AGENTS.md`、`README.md`、`docs/HANDOFF.md`、`docs/TESTING-AND-RELEASE.md`、`docs/VALIDATION-LOG.md`，`git diff --cached --check` 退出码 0；人工检查差异未见账号、密码或认证请求。提交 `fdeac540890f870de809417d0dc6d9cb9adde4d7` 后 `git push origin main` 退出码 0，`git ls-remote origin refs/heads/main` 回读同一提交，GitHub 文件接口可读取更新后的交接页。本次仅公开文档，没有发布安装包或 Release。
 
 ## 后续记录格式
 
