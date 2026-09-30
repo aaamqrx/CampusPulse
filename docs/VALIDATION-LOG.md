@@ -158,6 +158,7 @@
 - **PWR-01 空闲监测：未执行**。只读 `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` 回读 AC 300 秒、DC 180 秒。新增 Idle 监测分支，核对真实最后输入时间、持续插电防睡眠请求、无待机事件及前后电源计划不变；PowerShell 语法检查通过。尝试派发时 UAC 被取消，命令退出码 1，未生成 ready 或样本；没有自动重试或修改电源计划/开关，不作为产品故障。
 - **新版后台副本准备：通过，尚未部署**。执行 `.tools/dotnet/dotnet.exe publish src/CampusPulse.Service/CampusPulse.Service.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false --output .local/service-validation-20260927/Service`，退出码 0。证据 `service-publish-fix.txt`。只更新忽略目录内副本，当前系统仍运行 09-29 代码，未停止服务、提交密码或生成安装包。
 - **故障验收脚本准备：未执行系统变更**。`validate-recovery.ps1` 通过 PowerShell 解析检查，默认入口退出码 0、仅显示计划：暂停认证、刷新固定临时后台、配置 5/15/60 秒重启后 NONE、一次结束已核对进程、验证系统重启及电源请求释放，再恢复设置并核对凭据密文。用户批准尚待回复，未执行 `-Execute`。此分支不能计为 SYS-06 或 PWR-02 崩溃释放通过。
+- **晚间源码/记录同步：通过**。仅暂存 README、四份状态/设计文档及两个验收脚本共 7 个路径，差异检查和明显秘密签名扫描通过；提交 `24e7ea889250242bb5663dbe623e39d59e685152`，推送 `origin main` 退出码 0，远端回读一致，工作区干净。本轮只公开源码和脱敏状态，未上传本机证据、安装包或 Release；未执行待批准的故障测试。
 
 ## 后续记录格式
 
