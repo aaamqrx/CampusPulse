@@ -31,6 +31,8 @@
 - SYS-06/PWR-02 异常结束部分：用户指示“下一步”后执行已说明的 `validate-recovery.ps1 -Execute -Elevate`，21:05:59 至 21:06:20，退出码 0，10 个断言通过、Restored=true。先暂停认证，再刷新固定临时服务并回读有限恢复策略；一次结束已核对的进程，系统电源请求立即释放，SCM 约 5 秒后以新 PID 自动恢复后台；暂停认证、凭据存在性及防睡眠请求均恢复。三个运行文件哈希与新版副本一致。最后三个开关恢复原值、凭据密文未变。证据 `recovery-validation.json`、`refresh-fix.txt`。只制造一次进程终止，未验证连续四次故障后的 NONE 行为；安装器配置仍未执行。
 - BOOT-02/05 与登录前运行仍未完整执行；SEC-02 完整诊断导出也未完成，不将已有假密码持久化检查写成全范围通过。
 - 两次重启准备：用户明确同意现在继续。`validate-boot-cycle.ps1 -Phase Disable -Execute -Elevate` 22:38:59 退出码 0，保存原三个开关/凭据摘要及启动基线，仅把自启设为 false，服务仍 Running/Manual。22:40:48 `inspect-local.ps1 -Elevate` 确认 Enabled/UnattendedMode=true、HasPassword=true、防睡眠及公网状态正常。首次重启后须先执行 AfterManualBoot，不启动服务；用户随后从正式界面手动启动，再执行 AfterManualStart 和 Restore，最后第二次重启核对登录前运行。当前等待首次重启，原自启恢复尚未执行。证据 `boot-cycle-original.json`、`boot-cycle-disable.json`、`boot-disabled-before.json`、`inspection-before-disabled-boot.json`；原首次重启证据另保存在 `initial-boot-*.json`。
+- BOOT-02/05 本次：通过。用户确认第一次重启后先只读回读，系统启动 22:46:52，22:49 AfterManualBoot 退出码 0，NewBootObserved=true、Stopped/Manual、自启保存为 false、凭据字节未变。仅打开正式窗口并核对启动按钮可用，没有代理启动服务；用户点击“启动后台服务”，确认后台运行、自启仍关闭及其他两个开关开启。22:52:59 AfterManualStart 退出码 0，Running/Manual、凭据未变。22:53:07 Restore 退出码 0，原三个开关均 true，Running/Auto、凭据字节未变；已保存 `boot-auto-before.json`，待第二次重启。证据 `boot-cycle-aftermanualboot.json`、`boot-disabled-after.json`、`ui-before-manual-start.json`、用户反馈、`boot-cycle-aftermanualstart.json`、`boot-cycle-restore.json`。
+- 界面新发现：后台停止且未加载过快照时，密码提示仍使用 XAML 默认“尚未保存密码”；后台文件及密文均存在，不能把该文本当作真实凭据状态。源码定位为初始 PasswordHint 及 ShowDisconnected 未刷新提示，记录待修正/构建；本次未清除凭据或要求重新输入密码。
 
 PWR-01 本机一次插电空闲验收：通过。原插电空闲睡眠时限 300 秒、电池 180 秒，未改电源计划。21:35:03 至 21:41:37 取得 196 个样本，最终连续空闲 331.235 秒，全程插电、后台 Running、防睡眠状态/请求有效，电源计划未变。初始脚本因 21:41:06 Kernel-Power 506 而严格判为未通过，保留原结果；后续 `inspect-sleep-report.ps1` 退出码 0，系统报告将该段明确分类为 Screen Off（21:41:06 至 21:45:21），覆盖最后样本，没有重叠 Sleep 阶段。`interpret-idle-report.ps1` 退出码 0，结合采样与报告得到 Passed=true。证明允许息屏及此次空闲期间没有实际 Sleep，不证明整夜或其他设备。证据 `idle-result.json`、`idle-sleepstudy.xml`、`idle-phase-verdict.json`；原始系统报告仅留忽略目录，公开摘要不含机器/应用历史。依据：[Modern Standby States](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/modern-standby-states)。
 
@@ -62,4 +64,4 @@ PWR-01 本机一次插电空闲验收：通过。原插电空闲睡眠时限 300
 
 原生项有缺口时保持打包门槛未完成。后续先记录现场结果与适用范围，修复部署验收完成后才重建安装包，再做安装、升级、卸载，最后公开并回读 Release。历史预览包不作为最终产物。
 
-当前接力点：另一普通账号权限已通过并清理。等待用户第一次重启；当前自启暂为 false，后台仍运行、另外两个开关 true。先只读 AfterManualBoot，再由用户启动后台并回读，恢复原自启后准备第二次重启。用户没有干净 Windows 环境，安装门槛缺口保留；安装包尚未重建。原始/脱敏证据均留在忽略目录，不上传。
+当前接力点：首次关闭自启开机及用户手动启动已通过，原三个开关已恢复 true，后台 Running/Auto，凭据未变。等待用户第二次重启，在登录界面等约 3 分钟后登录，再只读 inspect-boot After 及后台状态，避免手动启动破坏证据。后台未连接时密码提示的误导文本待修正。用户没有干净 Windows 环境，安装门槛缺口保留；安装包尚未重建。原始/脱敏证据均留在忽略目录，不上传。

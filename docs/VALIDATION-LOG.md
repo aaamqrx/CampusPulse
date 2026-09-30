@@ -190,6 +190,14 @@
 - **环境边界**：用户明确目前没有干净 Windows 虚拟机或其他测试电脑，干净机器安装验证暂缺，不把本机开发环境写成干净机器。不据此宣称安装生命周期或 Release 完成。
 - **BOOT 两次准备：仅第一步已执行**。用户明确愿意现在配合两次重启。新 `validate-boot-cycle.ps1` 解析及默认无变更计划通过。22:38:59 Disable 执行退出码 0，保存原三个开关、凭据摘要及重启前基线，仅关闭自启，服务 Running/Manual；未由代理重启。22:40:48 只读回读 StartWithWindows/ActualStartWithWindows=false、Enabled/UnattendedMode=true、HasPassword=true、防睡眠有效、State=Online。证据 `boot-cycle-disable.json`、`boot-disabled-before.json`、`inspection-before-disabled-boot.json`。当前需用户首次重启后先回读 Stopped/Manual，再从正式界面手动启动；原自启尚未恢复，第二次重启及登录前证据未执行。
 
+## 2026-09-30 22:49–22:53：关闭自启的开机与手动使用（`0.1.0-preview.1`，基线 `00af0c1`）
+
+- **BOOT-02：通过本次重启**。用户回复“第一次已重启”，代理未打开窗口或启动服务前执行 `validate-boot-cycle.ps1 -Phase AfterManualBoot -Elevate`，22:49 退出码 0，NewBootObserved=true、Stopped/Manual、保存自启 false、CredentialBytesUnchanged=true。系统启动 22:46:52，用户交互会话 22:47:12，后台无进程。证据 `boot-cycle-aftermanualboot.json`、`boot-disabled-after.json`；没有把服务配置推断为实际停止。
+- **BOOT-05：通过本次用户操作**。仅运行 `inspect-ui.ps1 -KeepOwnWindow -Elevate` 打开正式窗口，22:50 回读后台已停止、启动按钮可用，没有自动启动。用户点击一次“启动后台服务”，确认后台运行、自启仍关闭，另外两个开关开启。22:52:59 AfterManualStart 退出码 0，Running/Manual、Enabled/UnattendedMode=true、CredentialBytesUnchanged=true。证据 `ui-before-manual-start.json`、用户反馈、`boot-cycle-aftermanualstart.json`；不由代理代点启动或发送认证。
+- **原设置恢复及第二次基线：通过**。22:53:07 `validate-boot-cycle.ps1 -Phase Restore -Execute -Elevate` 退出码 0，原三个开关均 true，后台 Running/Auto、凭据密文未变。已保存 `boot-auto-before.json`；第二次重启和登录前运行仍待用户操作，没有代理重启。
+- **新界面问题：已定位，尚未改码**。服务停止时窗口仍显示 XAML 初值“尚未保存密码”，尽管凭据文件存在且密文未变。ShowDisconnected 未重置 PasswordHint，初始提示也提前声称无密码。拟改为未连接时暂无法确认凭据状态，待第二次重启后修正并执行开发检查；不要求用户再次输入真实密码。此问题保留为打包前待修项。
+- **源码同步基线**：上轮六个白名单路径提交 `00af0c1dd9a53306bf96d86b94d1c53e578febc1`，推送退出码 0，远端 main 回读一致，工作区当时干净。本轮只记录原生结果；安装包及 Release 未执行。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。
