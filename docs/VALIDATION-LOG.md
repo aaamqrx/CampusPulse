@@ -168,6 +168,12 @@
 - **窗口验收准备，原生结果待回读**：新增 `validate-ui-window.ps1`，PowerShell 解析检查通过。派发 `-Elevate` 后，截至 21:20 存在系统 consent 提示、无 `ui-window-validation.json`，不能记为通过或产品失败。脚本只操作自己启动的界面窗口，核对尺寸/最小化/关闭收起及后台连续运行，未授权其保存设置、停止后台或触发认证；真实托盘菜单及视觉裁切仍单独验收。已向用户询问是否重新开始此前取消的只读空闲监测，未获得答复前不开始。
 - **公开源码同步：通过**。仅暂存六份状态/设计文档及窗口验收脚本共七个路径，差异检查、PowerShell 解析及明显秘密签名扫描通过。提交 `e3fbff47fa546c3650f4367c03aa3aa9288c184f`，推送 `origin main` 退出码 0，`ls-remote` 回读同一哈希，工作区当时干净；未上传本机证据、凭据或安装包。本条上传记录另行同步，最终状态以 Git HEAD/远端回读为准。
 
+## 2026-09-30 21:34：窗口调用失败与持续空闲监测（`0.1.0-preview.1`，基线 `9dd0b53`）
+
+- **窗口检查：部分执行，退出码 1**。用户确认此前 UAC 提示，21:34:13 打开脚本自己的正式窗口成功；随后调整尺寸前发生 `System.Management.Automation.MethodInvocationException`，尚无具体调用定位。清理仅结束脚本自己的界面进程，确认同一后台 PID 仍 Running。尺寸、最小化、关闭收起及托盘尚未通过；不将自动化调用错误直接标为产品缺陷。证据 `ui-window-validation.json`。检查脚本补充阶段、行号及根异常类型，均不读取账号密码值。
+- **PWR-01：监测已开始，结果待回读**。用户明确表示“现在进行”，派发 `watch-local.ps1 -Scenario Idle -IdleSeconds 300 -DurationSeconds 540 -Elevate`。ready 为 21:35:03，首批样本确认插电、后台 Running、三个开关 true、防睡眠状态/请求有效。已提示保持充电器与网线连接、约 6 分钟不操作电脑；未修改电源计划，不触发人工认证。证据 `idle-ready.txt`、`idle-samples.jsonl`，完成后回读 `idle-result.json`，不能把派发退出码 0 当作验收通过。
+- **PWR-01 回读：当前断言未通过，原因待分层核对**。21:41:37 结果 Failure=null、SampleCount=196、AllServiceRunning/PlanUnchanged/IdleReached/ContinuousPluggedInPowerRequest 均 true，最终连续空闲 331.235 秒；StandbyEntryCount=1。系统回读 21:41:06 Kernel-Power 506，原因 Idle Timeout，因此不计为通过。现代待机的 Screen Off 与实际 Sleep 是不同阶段，已查微软官方说明，准备 `inspect-sleep-report.ps1` 生成系统分阶段报告，尚未取得报告，不能先认定产品失效或改判通过。用户已被告知监测结束、可以操作电脑。窗口排查重新派发后仍等新 UAC 确认，后续结果待回读；未改电源计划或开关。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

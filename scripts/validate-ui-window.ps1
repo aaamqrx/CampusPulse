@@ -26,7 +26,7 @@ public static class ProductWindowNative {
  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr handle);
 }
 '@
-$owned = $null; $failure = $null
+$owned = $null; $failure = $null; $failureLine = $null; $failureCause = $null; $phase = 'Preparation'
 $steps = [Collections.Generic.List[object]]::new()
 function Record([string]$Name, [bool]$Passed) {
     $steps.Add([ordered]@{Name=$Name;Passed=$Passed;Time=[DateTimeOffset]::Now.ToString('o')})
@@ -55,17 +55,24 @@ try {
     }
     Record 'Own formal window opened' ($null -ne $window -and $window.Current.ProcessId -eq $owned.Id)
     Start-Sleep -Seconds 2
+    $phase = 'Read native handle and DPI'
     $handle = [IntPtr]$window.Current.NativeWindowHandle
     $scale = [ProductWindowNative]::GetDpiForWindow($handle) / 96.0
+    $phase = 'Read transform pattern'
     $transform = $window.GetCurrentPattern([Windows.Automation.TransformPattern]::Pattern)
+    $phase = 'Read window pattern'
     $pattern = $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)
+    $phase = 'Resize to minimum'
     $transform.Resize(900*$scale,680*$scale)
     Start-Sleep -Milliseconds 700
     Record 'Minimum supported window size responds' (-not $owned.HasExited -and $window.Current.BoundingRectangle.Width -ge 900*$scale-2)
+    $phase = 'Resize to default'
     $transform.Resize(1080*$scale,850*$scale)
+    $phase = 'Minimize'
     $pattern.SetWindowVisualState([Windows.Automation.WindowVisualState]::Minimized)
     Start-Sleep -Milliseconds 700
     Record 'Minimize leaves background process running' ((Service-Pid) -eq $backgroundPid -and (Get-Service CampusPulse).Status -eq 'Running')
+    $phase = 'Close to tray'
     $pattern.SetWindowVisualState([Windows.Automation.WindowVisualState]::Normal)
     $pattern.Close()
     Start-Sleep -Seconds 2
@@ -77,7 +84,11 @@ try {
     Record 'Restored window is visible' ([ProductWindowNative]::IsWindowVisible($handle))
     Record 'Window operations preserve settings and credential bytes' ((Get-FileHash -LiteralPath $settingsFile).Hash -eq $settingsHash -and
         (Get-FileHash -LiteralPath $credentialsFile).Hash -eq $credentialHash)
-} catch { $failure=$_.Exception.GetType().FullName }
+} catch {
+    $failure=$_.Exception.GetType().FullName
+    $failureLine=$_.InvocationInfo.ScriptLineNumber
+    $failureCause=$_.Exception.GetBaseException().GetType().FullName
+}
 finally {
     if ($null -ne $owned -and -not $owned.HasExited) {
         # Only this script's own interface process; never terminate the background or user windows.
@@ -88,7 +99,7 @@ finally {
                 Passed=((Service-Pid) -eq $backgroundPid -and (Get-Service CampusPulse).Status -eq 'Running');Time=[DateTimeOffset]::Now.ToString('o')})
         }
     }
-    [ordered]@{Time=[DateTimeOffset]::Now.ToString('o');Failure=$failure;Steps=@($steps.ToArray());
+    [ordered]@{Time=[DateTimeOffset]::Now.ToString('o');Failure=$failure;FailureLine=$failureLine;FailureCause=$failureCause;Phase=$phase;Steps=@($steps.ToArray());
         TrayMenuNotTested=$true;VisualClippingNotTested=$true;NoConfigurationCommands=$true} | ConvertTo-Json -Depth 5 |
         Set-Content -LiteralPath (Join-Path $evidence 'ui-window-validation.json') -Encoding UTF8
 }
