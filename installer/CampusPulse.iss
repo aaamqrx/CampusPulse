@@ -103,6 +103,18 @@ begin
   end;
 end;
 
+function IsExpectedProductService(): Boolean;
+var
+  ImagePath, ExpectedPath: string;
+begin
+  Result := False;
+  if not RegQueryStringValue(HKLM, ServiceRegistryKey, 'ImagePath', ImagePath) then Exit;
+  ExpectedPath := ExpandConstant('{app}\Service\CampusPulse.Service.exe');
+  ImagePath := Trim(ImagePath);
+  Result := (CompareText(ImagePath, '"' + ExpectedPath + '"') = 0) or
+    (CompareText(ImagePath, ExpectedPath) = 0);
+end;
+
 function StopProductService(): Boolean;
 var
   Manager, Service: THandle;
@@ -112,6 +124,7 @@ var
 begin
   Result := not RegKeyExists(HKLM, ServiceRegistryKey);
   if Result then Exit;
+  if not IsExpectedProductService() then Exit;
   Manager := OpenSCManager('', 'ServicesActive', SC_MANAGER_CONNECT);
   if Manager = 0 then Exit;
   try
@@ -163,6 +176,11 @@ begin
   StartServiceAfterInstall := not ExistingService;
   if ExistingService then
   begin
+    if not IsExpectedProductService() then
+    begin
+      Result := 'A different service uses the CampusPulse name. Its path does not match this installation. No service or files were changed.';
+      Exit;
+    end;
     if not ReadServiceState(State) then
     begin
       Result := 'Cannot read the existing CampusPulse service state. No files were replaced.';
@@ -205,6 +223,8 @@ begin
   if CurUninstallStep <> usUninstall then Exit;
   if RegKeyExists(HKLM, ServiceRegistryKey) then
   begin
+    if not IsExpectedProductService() then
+      RaiseException('The CampusPulse service path does not match this installation. No service or files were removed.');
     if not StopProductService() then
       RaiseException('CampusPulse did not stop within 30 seconds. Uninstall was stopped before removing program files.');
     RunServiceCommand('delete ' + ServiceName, 'Remove CampusPulse service');
