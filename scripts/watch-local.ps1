@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Power', 'Lock', 'Sleep')][string]$Scenario = 'Power',
-    [ValidateRange(15, 180)][int]$DurationSeconds = 90,
+    [ValidateSet('Power', 'Lock', 'Sleep', 'Idle')][string]$Scenario = 'Power',
+    [ValidateRange(15, 600)][int]$DurationSeconds = 90,
+    [ValidateRange(30, 3600)][int]$IdleSeconds = 300,
     [switch]$Elevate
 )
 
@@ -13,7 +14,7 @@ $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.Wind
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if (-not $Elevate) { throw 'Administrator required. Use -Elevate for local UAC.' }
     $child = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList @(
-        '-NoProfile', '-File', ('"' + $PSCommandPath + '"'), '-Scenario', $Scenario, '-DurationSeconds', $DurationSeconds)
+        '-NoProfile', '-File', ('"' + $PSCommandPath + '"'), '-Scenario', $Scenario, '-DurationSeconds', $DurationSeconds, '-IdleSeconds', $IdleSeconds)
     Write-Host ('Read-only monitor dispatched; PID={0}. Check local ready/result files, not this dispatch, for evidence.' -f $child.Id)
     exit 0
 }
@@ -27,6 +28,12 @@ public static class AcceptancePower {
  }
  [DllImport("kernel32.dll")] static extern bool GetSystemPowerStatus(out Status value);
  public static int AC() { Status value; return GetSystemPowerStatus(out value) ? value.AC : -1; }
+ [StructLayout(LayoutKind.Sequential)] struct LastInput { public uint Size, Time; }
+ [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LastInput input);
+ public static double Idle() {
+  var input = new LastInput { Size = (uint)Marshal.SizeOf(typeof(LastInput)) };
+  return GetLastInputInfo(ref input) ? unchecked((uint)Environment.TickCount - input.Time) / 1000.0 : -1;
+ }
 }
 '@
 function Get-Status {
@@ -64,7 +71,8 @@ try {
         $sample = [ordered]@{ Time = [DateTimeOffset]::Now.ToString('o'); AC = [AcceptancePower]::AC();
             ServiceRunning = ((Get-Service CampusPulse).Status -eq 'Running'); Enabled = $s.Settings.Enabled;
             UnattendedMode = $s.Settings.UnattendedMode; KeepingAwake = $s.KeepingAwake;
-            PowerRequest = $requests.Contains('CampusPulse'); LastCheck = $s.LastCheck; State = $s.State }
+            PowerRequest = $requests.Contains('CampusPulse'); LastCheck = $s.LastCheck; State = $s.State;
+            IdleSeconds = [AcceptancePower]::Idle() }
         $samples.Add($sample)
         $sample | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $evidence ($Scenario.ToLowerInvariant() + '-samples.jsonl')) -Encoding UTF8
         if ($Scenario -eq 'Power') {
@@ -84,6 +92,7 @@ try {
                 $resume.Count -gt 0 -and $sample.ServiceRunning -and $null -ne $sample.LastCheck -and
                 [DateTimeOffset]$sample.LastCheck -gt [DateTimeOffset]$resume[-1].TimeCreated -and $sample.State -eq 5) { break }
         }
+        if ($Scenario -eq 'Idle' -and $sample.IdleSeconds -ge ($IdleSeconds + 30)) { break }
         Start-Sleep -Seconds 2
     }
 }
@@ -105,8 +114,18 @@ if ($Scenario -eq 'Sleep') {
         $null -ne $samples[-1].LastCheck -and [DateTimeOffset]$samples[-1].LastCheck -gt
         [DateTimeOffset]$resume[-1].TimeCreated -and $samples[-1].State -eq 5
 }
+if ($Scenario -eq 'Idle') {
+    $result.RequiredIdleSeconds = $IdleSeconds + 30
+    $result.IdleReached = $samples.Count -gt 0 -and $samples[-1].IdleSeconds -ge ($IdleSeconds + 30)
+    $result.ContinuousPluggedInPowerRequest = $samples.Count -gt 0 -and
+        @($samples | Where-Object { $_.AC -ne 1 -or -not $_.KeepingAwake -or -not $_.PowerRequest }).Count -eq 0
+    $standby = @(Get-WinEvent -FilterHashtable @{ LogName='System'; ProviderName='Microsoft-Windows-Kernel-Power';
+        Id=@(42,506); StartTime=$started.LocalDateTime } -ErrorAction SilentlyContinue)
+    $result.StandbyEntryCount = $standby.Count
+}
 $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $evidence ($Scenario.ToLowerInvariant() + '-result.json')) -Encoding UTF8
 if ($null -ne $failure -or -not $planUnchanged) { exit 1 }
 if ($Scenario -eq 'Power' -and -not $recovered) { exit 1 }
 if ($Scenario -eq 'Sleep' -and (-not $result.SleepAndResumeObserved -or -not $result.ResumeNetworkChecked)) { exit 1 }
+if ($Scenario -eq 'Idle' -and (-not $result.IdleReached -or -not $result.ContinuousPluggedInPowerRequest -or $result.StandbyEntryCount -gt 0)) { exit 1 }
 exit 0

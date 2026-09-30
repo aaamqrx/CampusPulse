@@ -24,10 +24,12 @@
 
 - PWR-03：通过。用户确认拔下充电器并接回，网线不动。只读采样 19 条：12:52:54 进入电池供电，12:52:56 起防睡眠状态和系统请求均释放，12:53:09 插电后均恢复；后台持续 Running，前后电源计划一致。证据 `power-result.json`。
 - SYS-04 锁屏部分：用户确认按 Win+L 锁屏约 20 秒并解锁；12:56:26 至 12:57:27 的 30 个只读样本均显示后台 Running，电源计划不变。证据 `lock-result.json` 及用户现场反馈。未单独观察屏幕自动关闭或托盘菜单操作。
-- BOOT-01/03：用户自行重启，登录前留出延迟启动时间；重启后比对新启动时间、服务进程启动时间和用户交互登录时间。尚未执行，不能用 Auto 配置替代。
+- BOOT-01/03 自动启动部分：用户确认已重启；After 回读系统启动 19:29:49、当前账户最早交互会话 19:30:11、服务进程启动 19:32:20，NewBootObserved=true，Running/延迟 Auto。三个开关 true、凭据存在、防睡眠和公网状态均正常。StartedBeforeInteractiveLogon=false，不能认定登录前启动；已向用户询问实际等待/登录方式，尚未回复。证据 `boot-after.json`、`inspection-after-boot.json`。不要把延迟自启配置当成登录前证据。
 - SYS-05 S0 现代待机：通过一次。用户确认主动睡眠并唤醒；系统事件 506/507 分别为 13:03:12/13:03:50。后台持续可用，13:05:27 自动检查、13:05:28 公网验证成功，未发送人工 check/reconnect。电源计划不变；13:08:09 已恢复无人值守，三个开关均 true、防睡眠生效、凭据密文不变。证据 `sleep-result.json`、`sleep-network-proof.json`、`restored-after-sleep.json`。传统 S3 与休眠本机不支持/未启用，不修改电源配置去启用。
-- SYS-06：现有临时服务无恢复策略；需先核对范围、应用有限恢复策略，再单独验证崩溃恢复。不得直接对开启认证的真实后台反复制造崩溃。
+- SYS-06：现有临时服务无恢复策略。新版自包含 Service 已发布至忽略目录，尚未部署；`validate-recovery.ps1` 已通过语法检查和只显示计划的默认入口，待用户批准后先暂停认证、刷新已标记的临时服务、配置有限恢复，再结束进程一次，验证请求释放和系统拉起，最后恢复三个开关及凭据不变。当前尚未执行故障测试，不得对开启认证的后台反复制造崩溃。
 - BOOT-02/05、SEC-01 另一普通用户、SEC-02 完整诊断导出、PWR-01 超过空闲睡眠时长与 PWR-02 崩溃释放仍未完整执行。
+
+本机原插电空闲睡眠时限为 300 秒，电池为 180 秒；未改电源计划。已准备 `watch-local.ps1 -Scenario Idle -IdleSeconds 300 -DurationSeconds 540 -Elevate`，使用真实最后输入时间验证连续空闲超过 330 秒、请求持续及没有待机事件。首次 UAC 被取消，未生成 ready/样本，因此该次未执行，未自动重试。
 
 ## 可执行入口
 
@@ -37,6 +39,8 @@
 - `powershell -NoProfile -File scripts/inspect-ui.ps1 -Elevate`：只读正式界面白名单控件。
 - `powershell -NoProfile -File scripts/validate-local.ps1`：仅显示操作计划，不改状态。
 - `powershell -NoProfile -File scripts/validate-local.ps1 -Execute -Elevate`：只有获得开关/后台重启授权后使用；已授权本轮执行并恢复。
+- `powershell -NoProfile -File scripts/validate-recovery.ps1`：只显示具体故障测试范围。
+- `powershell -NoProfile -File scripts/validate-recovery.ps1 -Execute -Elevate`：须取得故障测试授权；当前尚未执行。
 - `powershell -NoProfile -File scripts/watch-local.ps1 -Scenario Power -Elevate`：异步只读监测；派发成功不代表通过，应检查 ready 和 result 文件。
 - `powershell -NoProfile -File scripts/watch-local.ps1 -Scenario Sleep -Elevate`：用户先关闭无人值守；比对系统睡眠/恢复事件与唤醒后自动检查，结束后恢复原无人值守设置。首次现场运行采用系统事件与独立后续状态回读共同验收。
 - `powershell -NoProfile -File scripts/inspect-boot.ps1 -Phase Before -Elevate`：只读保存重启前基线，不重启电脑。
@@ -45,4 +49,4 @@
 
 原生项有缺口时保持打包门槛未完成。后续先记录现场结果与适用范围，修复部署验收完成后才重建安装包，再做安装、升级、卸载，最后公开并回读 Release。历史预览包不作为最终产物。
 
-当前接力点：重启前基线已于 13:08:12 保存至 `boot-before.json`，此前系统启动时间为 09-28 21:54:34，服务进程起于本轮受控重启 12:37:01。用户下一步自行重启，停留登录界面约 3 分钟再登录，回到本聊天；接手后先运行 After 和 inspect-local，不先手动启动服务或打开正式 App。重启后的结果尚未执行。
+当前接力点：重启后的只读回读已完成，自启成功但登录前启动未证实；正在等待用户说明实际登录过程，以及批准修复版部署/一次故障测试。当前后台仍为 09-29 副本，三个开关 true，公网在线、防睡眠生效。原始/脱敏证据均留在忽略目录，不上传。空闲值守监测的 UAC 取消不作为项目故障，不自动重试。

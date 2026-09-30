@@ -151,6 +151,14 @@
 
 - **源码提交、推送与回读：通过**。六个验收/临时脚本的 PowerShell 解析检查通过，临时服务 Status 回读 Running/Auto。仅白名单暂存 15 个源码、脚本及脱敏文档路径；`git diff --cached --check`、明显密钥/令牌签名扫描及 Git 历史禁止路径检查通过。提交 `c557257d5b5a74b1e85f23697387cd422c0c698d`，`git push origin main` 退出码 0，`git ls-remote origin refs/heads/main` 返回同一哈希，工作区当时干净。只发布源码，未上传 `.local/`、`.tools/`、`artifacts/`、本机数据或安装包。本条及重启时间核对脚本排除 DWM/UMFD 会话的补充随后同步，最终文档提交以远端回读为准。
 
+## 2026-09-30 晚间：重启后自动启动回读（`0.1.0-preview.1`，源码基线 `85089aa`）
+
+- **BOOT-01/03 自动启动部分：通过；登录前启动未证实**。用户回复“已重启”后，没有手动启动服务或设置窗口。执行 `inspect-boot.ps1 -Phase After -Elevate` 和 `inspect-local.ps1 -Elevate`，整体退出码 0。回读系统启动 19:29:49、当前账户最早交互会话 19:30:11、服务进程启动 19:32:20；新重启成立，后台 Running/延迟 Auto，StartedBeforeInteractiveLogon=false。三个开关 true、HasPassword=true、KeepingAwake=true、系统电源请求存在，State=Online、LastSuccess 为 19:42:24。已询问用户是否在登录界面等待或先进入桌面，尚未回复；不能从本条推断登录前认证或要求再做跨夜。证据 `.local/acceptance-20260930/boot-after.json`、`inspection-after-boot.json`。
+- **工具过程与边界**。普通命令入口仍报 `helper_unknown_error: setup refresh had errors`，使用获准的只读命令继续。管理员检查等待 UAC/结果时，额外读 `sc.exe query/qc CampusPulse` 确认 Running、延迟 Auto、固定验证路径和 LocalSystem，没有发送启动或认证命令。部分 PowerShell 对象未在退出前完整渲染，因此以脚本写出的 JSON 和 sc 原生输出为证据，不把空输出记为无服务。
+- **PWR-01 空闲监测：未执行**。只读 `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` 回读 AC 300 秒、DC 180 秒。新增 Idle 监测分支，核对真实最后输入时间、持续插电防睡眠请求、无待机事件及前后电源计划不变；PowerShell 语法检查通过。尝试派发时 UAC 被取消，命令退出码 1，未生成 ready 或样本；没有自动重试或修改电源计划/开关，不作为产品故障。
+- **新版后台副本准备：通过，尚未部署**。执行 `.tools/dotnet/dotnet.exe publish src/CampusPulse.Service/CampusPulse.Service.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false --output .local/service-validation-20260927/Service`，退出码 0。证据 `service-publish-fix.txt`。只更新忽略目录内副本，当前系统仍运行 09-29 代码，未停止服务、提交密码或生成安装包。
+- **故障验收脚本准备：未执行系统变更**。`validate-recovery.ps1` 通过 PowerShell 解析检查，默认入口退出码 0、仅显示计划：暂停认证、刷新固定临时后台、配置 5/15/60 秒重启后 NONE、一次结束已核对进程、验证系统重启及电源请求释放，再恢复设置并核对凭据密文。用户批准尚待回复，未执行 `-Execute`。此分支不能计为 SYS-06 或 PWR-02 崩溃释放通过。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。
