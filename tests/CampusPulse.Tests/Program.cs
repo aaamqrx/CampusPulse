@@ -19,6 +19,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-09 redirected template refuses credential submission", RedirectedTemplate),
     ("SEC-03 old credentials pause and new credentials bind to carrier and portal", CredentialIdentity),
     ("SEC-02/03 replacement and clearing keep passwords out of stored plaintext", CredentialReplacementAndClearing),
+    ("SEC-02 rejected responses and transport errors keep secrets out of diagnostics", FailedAuthenticationDiagnostics),
     ("CFG-04 failed settings replacement restores previous credential", ConfigurationRollback),
     ("NET-06 blocked authentication survives settings reload", BlockedAuthenticationPersists),
     ("NET-06 rejected authentication remains blocked after worker restart", WorkerRestartKeepsRejection),
@@ -336,6 +337,56 @@ static Task CredentialReplacementAndClearing()
     return Task.CompletedTask;
 }
 
+static async Task FailedAuthenticationDiagnostics()
+{
+    const string password = "FAKE-ONLY-LEAK-CHECK+728";
+    foreach (bool transportFailure in new[] { false, true })
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new SecureStore(directory);
+            var settings = new CampusSettings { Enabled = true, Username = "student", StartWithWindows = false };
+            store.SaveConfiguration(settings, new StoredCredential("student", password)
+                { ProtocolVersion = 2, Carrier = settings.Carrier, PortalUrl = settings.PortalUrl });
+            using var fixture = new Fixture
+            {
+                ThrowLoginTransportError = transportFailure,
+                LoginBodyOverride = "campuspulse(" + JsonSerializer.Serialize(new
+                {
+                    result = 0, ret_code = 1,
+                    msg = password + " http://10.1.2.3/eportal/portal/login?user_password=" + Uri.EscapeDataString(password)
+                }) + ")"
+            };
+            using var worker = new ConnectionWorker(store, new StartupManager(), fixture.Client);
+            await worker.StartAsync(CancellationToken.None);
+            try
+            {
+                await WaitUntil(() => worker.Snapshot.State is ConnectionState.AuthenticationRejected or ConnectionState.PortalUnavailable,
+                    "simulated login failure reaches a diagnostic state");
+                Check(fixture.Requests.Count(uri => uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal)) == 1,
+                    "failure scenario exercises exactly one fake credential request");
+                File.WriteAllText(Path.Combine(directory, "status-reply.json"),
+                    JsonSerializer.Serialize(await worker.HandleAsync(new ServiceRequest("status"), CancellationToken.None)));
+                // The production Copy Events action uses this formatter. Do not touch the user clipboard.
+                string diagnostic = DiagnosticText.Format(worker.Snapshot.RecentEvents);
+                Check(diagnostic.Length > 0, "diagnostic export is populated");
+                File.WriteAllText(Path.Combine(directory, "diagnostic.txt"), diagnostic);
+            }
+            finally { await worker.StopAsync(CancellationToken.None); }
+            foreach (string path in Directory.GetFiles(directory))
+            {
+                string text = Encoding.UTF8.GetString(File.ReadAllBytes(path));
+                Check(!text.Contains("FAKE-ONLY-LEAK-CHECK", StringComparison.Ordinal) &&
+                    !text.Contains("user_password", StringComparison.Ordinal),
+                    "persisted data, status reply and exported events contain no secret or credential URL");
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+}
+
 static Task ConfigurationRollback()
 {
     string directory = Path.Combine(Path.GetTempPath(), "CampusPulse-Test-" + Guid.NewGuid().ToString("N"));
@@ -533,6 +584,8 @@ sealed class Fixture : IDisposable
     public bool DelayLogin { get; set; }
     public bool StallLogin { get; set; }
     public bool RejectLogin { get; set; }
+    public bool ThrowLoginTransportError { get; set; }
+    public string? LoginBodyOverride { get; set; }
     public bool GzipScript { get; set; }
     public string? ScriptOverride { get; set; }
     public int MaxLoginInFlight { get; private set; }
@@ -558,6 +611,8 @@ sealed class Fixture : IDisposable
         {
             var uri = request.RequestUri ?? throw new Exception("missing target");
             fixture.Requests.Add(uri);
+            if (fixture.ThrowLoginTransportError && uri.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
+                throw new HttpRequestException(uri.AbsoluteUri);
             if (fixture.RedirectTemplate && uri.AbsolutePath.EndsWith("/pc.js", StringComparison.Ordinal))
                 return new HttpResponseMessage(HttpStatusCode.Redirect)
                 { Headers = { Location = new Uri("http://example.com/other-template") } };
@@ -601,8 +656,8 @@ sealed class Fixture : IDisposable
                     ? "campuspulse({\"result\":1,\"v46ip\":\"10.1.2.3\"})"
                     : "campuspulse({\"result\":0,\"v46ip\":\"10.1.2.3\"})",
                 "/a40.js" => "jsVersion = '4.2.0';",
-                "/eportal/portal/login" => fixture.RejectLogin
-                    ? "campuspulse({\"result\":0,\"ret_code\":1})" : "campuspulse({\"result\":1})",
+                "/eportal/portal/login" => fixture.LoginBodyOverride ?? (fixture.RejectLogin
+                    ? "campuspulse({\"result\":0,\"ret_code\":1})" : "campuspulse({\"result\":1})"),
                 _ => throw new Exception("unexpected target")
             };
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };

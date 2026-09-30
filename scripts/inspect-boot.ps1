@@ -39,6 +39,34 @@ try {
         $record.EarliestInteractiveLogon = if ($null -ne $earliest) { $earliest.ToString('o') } else { $null }
         $record.StartedBeforeInteractiveLogon = $record.NewBootObserved -and $null -ne $earliest -and
             $null -ne $record.ProcessStarted -and [DateTime]$record.ProcessStarted -lt $earliest
+        # Windows may restore and lock a session before the user returns.
+        # Keep session creation and actual user unlock as separate evidence.
+        $record.LockUnlockQuerySucceeded = $false
+        $record.CurrentUserLockUnlockEvents = @()
+        $record.StartedWhileLockedBeforeUserUnlock = $false
+        try {
+            $boundaries = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4800, 4801; StartTime = $boot } -ErrorAction Stop |
+                Where-Object {
+                    [xml]$xml = $_.ToXml()
+                    @($xml.Event.EventData.Data | Where-Object {
+                        $_.Name -eq 'TargetUserSid' -and $_.'#text' -eq $userSid
+                    }).Count -gt 0
+                } | Sort-Object TimeCreated)
+            $record.LockUnlockQuerySucceeded = $true
+            $record.CurrentUserLockUnlockEvents = @($boundaries | ForEach-Object {
+                [ordered]@{ Time = $_.TimeCreated.ToString('o'); Id = $_.Id }
+            })
+            if ($null -ne $record.ProcessStarted) {
+                $started = [DateTime]$record.ProcessStarted
+                $prior = @($boundaries | Where-Object { $_.TimeCreated -le $started })
+                $firstUnlock = @($boundaries | Where-Object { $_.Id -eq 4801 } | Select-Object -First 1)
+                $record.StartedWhileLockedBeforeUserUnlock = $record.NewBootObserved -and
+                    $prior.Count -gt 0 -and $prior[-1].Id -eq 4800 -and
+                    $firstUnlock.Count -gt 0 -and $started -lt $firstUnlock[0].TimeCreated
+            }
+        }
+        catch { # Missing audit events cannot establish this proof.
+        }
         $record.TimestampLimit = 'Current service process only; a restart after boot can prevent this proof.'
     }
     $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence ('boot-' + $Phase.ToLowerInvariant() + '.json')) -Encoding UTF8

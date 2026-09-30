@@ -93,7 +93,7 @@
                                 <TextBlock Style="{StaticResource Description}" Text="填写基础账号；也可粘贴与所选运营商匹配的完整账号。" Margin="0,5,0,13" />
                                 <Label Content="校园网密码" Target="{Binding ElementName=PasswordInput}" Padding="0" Margin="0,0,0,6" />
                                 <PasswordBox x:Name="PasswordInput" MaxLength="256" PasswordChanged="FieldChanged" AutomationProperties.Name="校园网密码" />
-                                <TextBlock x:Name="PasswordHint" Style="{StaticResource Description}" Text="尚未保存密码。密码只在本机受保护保存。" Margin="0,5,0,17" />
+                                <TextBlock x:Name="PasswordHint" Style="{StaticResource Description}" Text="正在读取后台凭据状态…" Margin="0,5,0,17" />
                                 <CheckBox x:Name="StartWithWindowsBox" Content="开机自动运行后台" Checked="FieldChanged" Unchecked="FieldChanged" />
                                 <TextBlock Style="{StaticResource Description}" Text="电脑重启后自动运行，无需进入桌面；不会自动弹出本窗口。" Margin="20,0,0,13" />
                                 <CheckBox x:Name="EnabledBox" Content="自动重连校园网" Checked="FieldChanged" Unchecked="FieldChanged" />

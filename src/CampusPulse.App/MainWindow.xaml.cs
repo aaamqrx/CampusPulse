@@ -161,6 +161,7 @@ public partial class MainWindow : Window
         StateBadge.Background = Brush("#FFF0DF");
         NextCheckText.Text = "当前无法确认";
         ActualAutostartText.Text = "当前无法确认";
+        PasswordHint.Text = "后台未连接，暂无法确认已保存凭据状态。";
         AwakeText.Text = _backgroundState is BackgroundState.Stopped or BackgroundState.NotInstalled ? "未生效（后台未运行）" : "当前无法确认";
         if (_snapshot is null) UnsavedText.Text = "后台连接后可编辑设置。";
         UpdateControls();
@@ -320,8 +321,7 @@ public partial class MainWindow : Window
         if (_snapshot is null || _snapshot.RecentEvents.Count == 0) return;
         try
         {
-            System.Windows.Clipboard.SetText(string.Join(Environment.NewLine, _snapshot.RecentEvents
-                .OrderByDescending(entry => entry.Time).Select(entry => $"{FormatTime(entry.Time)}  {entry.Message}")));
+            System.Windows.Clipboard.SetText(DiagnosticText.Format(_snapshot.RecentEvents));
             Feedback("已复制脱敏事件记录。");
         }
         catch (System.Runtime.InteropServices.ExternalException)
