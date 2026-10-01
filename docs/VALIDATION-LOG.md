@@ -214,6 +214,15 @@
 - **生命周期准备**：`validate-installation.ps1` 解析检查及默认计划退出码 0，不修改系统；新增固定路径/链接检查、备份权限验证、自动暂停认证、失败恢复和独立 Restore 入口。另以当前应用载荷编译 preview.0 测试安装器退出码 0，仅作跨版本安装器流程基线，不是历史旧代码或可分享成品。证据 `compile-upgrade-baseline.txt`，全部忽略。
 - **Preflight 实际状态**：已派发 `-Phase Preflight -Execute -Elevate`，到 10-01 00:01 仍有 consent 进程，尚无 installer-preflight.json 或安装日志。正在等待 Windows UAC，不标为执行通过。用户已获得明确弹窗提醒；真实配置备份、服务移除及生命周期阶段均未开始。干净 Windows 环境仍不可用，Release 未发布。
 
+## 2026-10-01 10:06–10:10：候选安装器安全拒绝与本机生命周期（基线 `721e8fc`）
+
+- **Preflight：通过**。用户继续后回读此前已授权调用，10:06:51 至 10:06:53、退出码 0、7 个断言 true、Failure=null。新安装器拒绝固定临时服务的不同路径，同一后台 PID 持续运行，配置/密文不变；未创建产品安装或服务文件。证据 `installer-preflight.json`，候选 SHA-256 `0a534bcc407213c3aa00a8d929a14b60c4f8ec4972c265e5315f61bd4cc26ae6`。
+- **Lifecycle：实际完成**。10:07:44 至 10:08:35，35 个断言全 true、Failure=null、OriginalDataRestored=true。父启动器 45 秒后显示 pending，随后 shell 回收为非零；不写成父调用退出码 0。子结果、实际正式服务与独立状态回读证明操作完成。先验证受保护备份，再暂停认证、核对标记后移除临时服务；全流程假凭据保持 Enabled=false。
+- **安装/升级/重装**。preview.0 测试基线首次安装为 Running/Auto、重连/无人值守 false、无凭据及正确快捷方式。保存假凭据、Manual 自启和独立无人值守后，候选包升级与同版重装成功，配置和加密凭据字节不变，六份 App/Service/Core 文件哈希匹配；正式自包含界面响应、密码遮蔽。preview.0 使用本轮载荷，只验证安装器跨版本流程，不证明历史旧代码迁移。
+- **卸载/再安装**。实际卸载移除服务、安装注册、产品可执行文件/快捷方式/三份数据，并释放防睡眠；无关标记文件保留且随后清理。开发原生窗口显示修正后的断连密码提示。再安装为首次默认、无旧假凭据。随后恢复原设置/密文，启动正式产品，电源计划不变。证据 `installer-lifecycle.json`、`ui-installed-final.json`、`ui-disconnected-password-fix.json` 及忽略目录安装日志。
+- **独立恢复复核：通过**。`inspect-local.ps1` 新增明确 Installed/Validation 固定路径选择，解析通过；10:10:31 `-Target Installed -Elevate` 退出码 0，正式 LocalSystem 服务 Running/Auto、原三个开关 true、HasPassword=true、KeepingAwake/系统请求 true。证据 `inspection-installed-restored.json`。没有读取或输出密码；受保护备份留待发布复验后清理。
+- **发布准备，未完成**。GitHub CLI 自身无登录态；复用本机对该仓库已有的 GitHub 凭据，仅在子进程环境临时使用，不输出/持久化令牌。只读 API 确认账号 aaamqrx、当前无 Release；新增清单源提交/标签状态和最终包复验阶段，解析及无修改计划通过。最终标签构建、最终包复验和 Release 尚未执行。干净 Windows、历史迁移及其他安装失败组合保持未验证，不把 M5 整体标为通过。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

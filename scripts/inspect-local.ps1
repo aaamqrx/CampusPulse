@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Elevate)
+param([switch]$Elevate, [ValidateSet('Validation', 'Installed')][string]$Target = 'Validation')
 
 # Read-only acceptance evidence. Never serialize the full settings or credentials.
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.Wind
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if (-not $Elevate) { throw 'Administrator required. Use -Elevate for local UAC.' }
     $child = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList @(
-        '-NoProfile', '-File', ('"' + $PSCommandPath + '"'))
+        '-NoProfile', '-File', ('"' + $PSCommandPath + '"'), '-Target', $Target)
     if (-not $child.WaitForExit(45000)) { throw 'Inspection pending. Check local UAC; no pass result is available.' }
     if ($child.ExitCode -ne 0) { throw 'Elevated inspection failed. See local sanitized evidence.' }
     $report = Get-Content -LiteralPath (Join-Path $evidenceDirectory 'inspection.json') -Raw | ConvertFrom-Json
@@ -22,8 +22,9 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
 try {
     $service = Get-CimInstance Win32_Service -Filter "Name='CampusPulse'"
+    $expectedRelative = if ($Target -eq 'Installed') { 'CampusPulse\Service\CampusPulse.Service.exe' } else { 'CampusPulse-Validation\CampusPulse.Service.exe' }
     if ($null -eq $service -or $service.PathName.Trim('"') -ne
-        (Join-Path $env:ProgramFiles 'CampusPulse-Validation\CampusPulse.Service.exe')) {
+        (Join-Path $env:ProgramFiles $expectedRelative)) {
         throw 'Unexpected service target'
     }
     $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'CampusPulse.Control.v1', [IO.Pipes.PipeDirection]::InOut)
@@ -65,6 +66,7 @@ try {
     })
     $result = [ordered]@{
         Time = [DateTimeOffset]::Now.ToString('o')
+        ServiceTarget = $Target
         Windows = $os.Caption; Build = $os.BuildNumber
         ServiceState = $service.State; StartMode = $service.StartMode; Identity = $service.StartName
         DelayedAutoStart = $reg.DelayedAutoStart

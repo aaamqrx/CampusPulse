@@ -73,3 +73,15 @@ SEC-02 追加离线范围：假密码保存后，分别模拟拒绝响应正文�
 当前接力点（2026-10-01）：本机现场项已按上述范围取得结果，不再安排第三次重启。09-30 23:44 新候选包完成自包含发布和 Inno 编译，30/30 离线检查通过；SHA-256 `0a534bcc407213c3aa00a8d929a14b60c4f8ec4972c265e5315f61bd4cc26ae6`，NotSigned。安装器新增安装/卸载服务路径核对。`validate-installation.ps1` 语法和默认无修改计划通过；Preflight 实际启动仍在等待 UAC，尚无结果，不标为拒绝检查通过。受保护备份及生命周期阶段未执行。用户没有干净 Windows 环境，缺口保留；Release 未发布。原始/脱敏证据均留在忽略目录，不上传。
 
 后续生命周期入口：`powershell -NoProfile -File scripts/validate-installation.ps1 -Phase Lifecycle -Execute -Elevate`；须先取得 Preflight 成功结果。固定范围为有标记的临时服务、默认 Program Files 安装目录、三份产品数据文件及产品快捷方式；先验证仅 SYSTEM/Administrators 的备份，再暂停认证及移除临时服务。安装测试基线、升级到候选包、重复安装、原生窗口、实际卸载、保留无关文件、重新安装及恢复原设置/加密凭据。测试用 preview.0 安装器使用本轮应用载荷，仅验证安装器跨版本流程，不能当作历史旧代码迁移验收。失败时尝试恢复，未结束的安装器不得与恢复竞跑；`-Phase Restore -Execute -Elevate` 提供中断后的明确恢复入口。脚本准备不等于执行通过。
+
+## 2026-10-01 本机安装生命周期结果
+
+- 10:06:51 至 10:06:53 Preflight 退出码 0，7 个断言通过；同名临时服务路径被拒绝，原 PID、配置及凭据密文未变，没有安装注册或产品文件。
+- 10:07:44 至 10:08:35 Lifecycle 完成，35 个断言全 true，Failure=null、OriginalDataRestored=true。父启动器等待超过 45 秒返回 pending，不能引用其为成功退出；之后回读完整结果与独立系统状态共同确认执行完成。
+- 实际安装 preview.0 测试基线，默认 Auto、自动重连/无人值守 false、无凭据；快捷方式存在。保存假凭据且认证保持关闭，关闭自启/开启无人值守后升级至候选 preview.1，运行和 Manual/三个开关/加密凭据字节保持；六个 App/Service/Core 文件哈希匹配发布载荷；同版重装同样保留。
+- 正式自包含安装窗口响应、密码遮蔽；实际卸载移除服务、安装注册、程序及快捷方式，清除三份产品数据、防睡眠请求释放，保留脚本创建的无关文件并清理此标记。卸载后的开发窗口显示正确的暂无法确认凭据状态。重新安装恢复首次默认且没有旧假凭据。
+- 原数据从仅 SYSTEM/Administrators 的固定备份恢复，恢复前核对配置/加密凭据原字节；10:10 `inspect-local.ps1 -Target Installed -Elevate` 退出码 0，正式产品 LocalSystem、Running/Auto、原三个开关 true、HasPassword=true、防睡眠有效。电源计划未变。受保护备份暂留至最终标签包复验后清理。
+- 证据 `.local/acceptance-20260930/installer-preflight.json`、`installer-lifecycle.json`、`ui-installed-final.json`、`ui-disconnected-password-fix.json`、`inspection-installed-restored.json` 和各安装日志，不上传。
+- 范围：这是本机已有开发环境中的产品首次安装/生命周期，未预装 .NET 的干净 Windows 未验证。preview.0 为当前载荷的安装器版本基线，不是历史发布源码；旧代码迁移、取消安装/提权、磁盘满/占用失败、中文自定义路径、卸载后重启等未验证。首个预览版仅按基础本机范围继续发布，完整 M5/稳定版门槛保持未完成。
+
+下一步：保存源码及记录，创建发布标签，从标签重新全量构建；执行 `validate-installation.ps1 -Phase FinalPackage -Execute -Elevate` 对最终新包复验，认证暂停期间保留凭据并恢复原三开关，然后创建草稿、校验附件后公开 prerelease。不得将候选校验值冒充最终标签包校验值。

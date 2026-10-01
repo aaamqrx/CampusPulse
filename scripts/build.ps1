@@ -151,7 +151,18 @@ try {
         [IO.File]::WriteAllText($checksumPath, "$checksum  $([IO.Path]::GetFileName($installer))`n", [Text.UTF8Encoding]::new($false))
     }
 
+    $sourceCommit = $null; $sourceDirty = $null; $sourceTags = @()
+    if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
+        $sourceCommit = (& git -c "safe.directory=$repoRoot" rev-parse HEAD | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot record the build source commit.' }
+        $sourceChanges = @(& git -c "safe.directory=$repoRoot" status --porcelain)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot record the build source state.' }
+        $sourceDirty = $sourceChanges.Count -gt 0
+        $sourceTags = @(& git -c "safe.directory=$repoRoot" tag --points-at HEAD)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot record the build source tags.' }
+    }
     $manifest = [ordered]@{
+        sourceCommit = $sourceCommit; sourceDirty = $sourceDirty; sourceTags = $sourceTags
         version = $Version; sdk = $sdkVersion; completedUtc = [DateTime]::UtcNow.ToString('O')
         configuration = $Configuration; runtime = 'win-x64'; selfContained = $true
         offlineTestsPassed = $true; installerBuilt = -not [bool]$SkipInstaller

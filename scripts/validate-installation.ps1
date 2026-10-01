@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('Preflight', 'Lifecycle', 'Restore')][string]$Phase = 'Preflight', [switch]$Execute, [switch]$Elevate)
+param([ValidateSet('Preflight', 'Lifecycle', 'Restore', 'FinalPackage')][string]$Phase = 'Preflight', [switch]$Execute, [switch]$Elevate)
 
 # Fixed local acceptance only. Never print settings, credentials, or full replies.
 $ErrorActionPreference = 'Stop'
@@ -21,6 +21,7 @@ if (-not $Execute) {
     Write-Host 'Lifecycle: protected opaque backup, pause, remove marked validation service, install test baseline, upgrade, repeat, uninstall, reinstall final, restore original data/settings.'
     Write-Host 'No reboot, network disconnection, power plan change, or manual authentication. Clean Windows and old-code migration remain untested.'
     Write-Host 'Restore: recover the fixed protected backup after an interrupted lifecycle; never decrypt credentials.'
+    Write-Host 'FinalPackage: recheck the clean tagged build on the installed product, temporarily pause authentication, preserve encrypted credentials and restore original switches.'
     exit 0
 }
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -38,6 +39,8 @@ $mutationStarted = $false
 $installerPending = $false
 $ownedUi = $null
 $ownedSentinel = $false
+$finalRestoreSettings = $null
+$finalCredentialHash = $null
 function Assert-Check([bool]$Condition, [string]$Name) {
     $report.Assertions += [ordered]@{ Name = $Name; Passed = $Condition }
     if (-not $Condition) { throw [InvalidOperationException]::new($Name) }
@@ -155,6 +158,19 @@ function Restore-Original {
         $snapshot.Settings.UnattendedMode -eq $savedSettings.UnattendedMode) 'Original three switches and credential availability restored'
     $report.OriginalDataRestored = $true
 }
+function Restore-FinalSettings {
+    $service = Assert-ServicePath $productExe
+    if ($service.State -eq 'Stopped') {
+        Start-Service CampusPulse
+        (Get-Service CampusPulse).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+    }
+    $snapshot = Send-Control @{ Command = 'save'; Settings = $finalRestoreSettings }
+    Assert-Check ($snapshot.Settings.Enabled -eq $finalRestoreSettings.Enabled -and
+        $snapshot.Settings.StartWithWindows -eq $finalRestoreSettings.StartWithWindows -and
+        $snapshot.Settings.UnattendedMode -eq $finalRestoreSettings.UnattendedMode -and
+        $snapshot.HasPassword -and (Get-Hash (Join-Path $data 'credentials.dat')) -eq $finalCredentialHash) 'Final package preserves original encrypted credential and restores three switches'
+    $report.OriginalDataRestored = $true
+}
 
 try {
     foreach ($path in @($data, $backup, $appRoot, $installer, $baseline)) { Assert-SafePath $path $path }
@@ -162,6 +178,43 @@ try {
     Assert-Check ((Get-Hash $installer).ToLowerInvariant() -eq $manifest.sha256) 'New final candidate matches build manifest'
     $report.InstallerSha256 = $manifest.sha256
     if ($Phase -eq 'Restore') { Restore-Original }
+    elseif ($Phase -eq 'FinalPackage') {
+        $service = Assert-ServicePath $productExe
+        $currentCommit = (& git -c "safe.directory=$repo" rev-parse HEAD | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot verify current source commit' }
+        $tagCommit = (& git -c "safe.directory=$repo" rev-list -n 1 v0.1.0-preview.1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot verify release tag commit' }
+        Assert-Check ($manifest.sourceDirty -eq $false -and $manifest.sourceTags -contains 'v0.1.0-preview.1' -and
+            $manifest.sourceCommit -eq $currentCommit -and $currentCommit -eq $tagCommit) 'Final build comes from the current clean release tag'
+        $report.SourceCommit = $manifest.sourceCommit
+        $original = Send-Control @{ Command = 'status' }
+        Assert-Check ($original.HasPassword -and $service.State -eq 'Running') 'Installed original profile available before final package check'
+        $finalRestoreSettings = $original.Settings
+        $finalCredentialHash = Get-Hash (Join-Path $data 'credentials.dat')
+        $paused = Send-Control @{ Command = 'pause' }
+        Assert-Check (-not $paused.Settings.Enabled) 'Automatic authentication paused during final package check'
+        $pausedHash = Get-Hash (Join-Path $data 'settings.json')
+        Assert-Check ((Run-Setup $installer 'install-final-tagged-package.log') -eq 0) 'Exact tagged final installer executes successfully'
+        $after = Assert-ServicePath $productExe
+        $snapshot = Send-Control @{ Command = 'status' }
+        Assert-Check ($after.State -eq 'Running' -and -not $snapshot.Settings.Enabled -and
+            (Get-Hash (Join-Path $data 'settings.json')) -eq $pausedHash -and
+            (Get-Hash (Join-Path $data 'credentials.dat')) -eq $finalCredentialHash) 'Exact final reinstall preserves paused settings and original encrypted credential'
+        foreach ($component in @('App', 'Service')) {
+            foreach ($name in @("CampusPulse.$component.exe", "CampusPulse.$component.dll", 'CampusPulse.Core.dll')) {
+                Assert-Check ((Get-Hash (Join-Path $appRoot "$component\$name")) -eq
+                    (Get-Hash (Join-Path $repo "artifacts\publish\$component\$name"))) ('Final tagged installed payload matches: ' + $component + '/' + $name)
+            }
+        }
+        Assert-Check ((Get-Hash (Join-Path $appRoot 'README.md')) -eq (Get-Hash (Join-Path $repo 'README.md'))) 'Final installed README matches tagged source'
+        $ownedUi = Start-Process -FilePath (Join-Path $appRoot 'App\CampusPulse.App.exe') -WindowStyle Hidden -PassThru
+        Start-Sleep -Seconds 3
+        & (Join-Path $repo 'scripts\inspect-ui.ps1')
+        if ($LASTEXITCODE -ne 0) { throw 'Tagged installed native UI inspection failed' }
+        Copy-Item -LiteralPath (Join-Path $evidence 'ui-inspection.json') -Destination (Join-Path $evidence 'ui-installed-tagged-final.json') -Force
+        $ui = Get-Content -LiteralPath (Join-Path $evidence 'ui-installed-tagged-final.json') -Raw | ConvertFrom-Json
+        Assert-Check ($ui.WindowProcessId -eq $ownedUi.Id -and $ui.PasswordMasked) 'Exact tagged self-contained interface responds with masked password'
+    }
     else {
         $service = Assert-ServicePath $validationExe
         Assert-Check ($service.State -eq 'Running') 'Fixed marked validation service running before test'
@@ -291,6 +344,10 @@ finally {
     }
     if ($mutationStarted -and -not $report.OriginalDataRestored) {
         try { Restore-Original }
+        catch { $report.RestorationFailure = $_.Exception.GetType().FullName }
+    }
+    if ($null -ne $finalRestoreSettings) {
+        try { Restore-FinalSettings }
         catch { $report.RestorationFailure = $_.Exception.GetType().FullName }
     }
     $report.Finished = [DateTimeOffset]::Now.ToString('o')
