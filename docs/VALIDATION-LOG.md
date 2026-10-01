@@ -223,6 +223,17 @@
 - **独立恢复复核：通过**。`inspect-local.ps1` 新增明确 Installed/Validation 固定路径选择，解析通过；10:10:31 `-Target Installed -Elevate` 退出码 0，正式 LocalSystem 服务 Running/Auto、原三个开关 true、HasPassword=true、KeepingAwake/系统请求 true。证据 `inspection-installed-restored.json`。没有读取或输出密码；受保护备份留待发布复验后清理。
 - **发布准备，未完成**。GitHub CLI 自身无登录态；复用本机对该仓库已有的 GitHub 凭据，仅在子进程环境临时使用，不输出/持久化令牌。只读 API 确认账号 aaamqrx、当前无 Release；新增清单源提交/标签状态和最终包复验阶段，解析及无修改计划通过。最终标签构建、最终包复验和 Release 尚未执行。干净 Windows、历史迁移及其他安装失败组合保持未验证，不把 M5 整体标为通过。
 
+## 2026-10-01 10:17–10:28：最终标签构建、复验、备份清理与公开预发布
+
+- **标签及最终构建：通过**。发布标签 `v0.1.0-preview.1` 指向 `dd2dc1e4ae5198a095e18ee55b2632a03ba74b2d`，推送并回读标签和 main。干净标签运行 `scripts/build.ps1`，10:17 完成、退出码 0；四项目 Release 0 警告/错误、30/30 离线检查、App/Service 自包含发布及 Inno 编译通过。清单 sourceDirty=false、sourceTags 包含标签、sourceCommit 等于标签提交。最终安装包 79,264,751 字节、NotSigned，SHA-256 `4bba4fa53113da88e110586f6fe192d97998b3fcb8bc405e2f17df3e2402a575`，校验文件一致。证据 `.local/acceptance-20260930/build-final-tag.txt`、`artifacts/build-manifest.json`；早期候选不是本次附件。
+- **FinalPackage 工具失败与修正**。首次 UAC 取消，退出码 1、无系统变更。10:20:57 再试在清单核验后终止，原开关/数据未变；提权子进程实际工作目录为 `C:\Windows\system32`，Git 未指定仓库路径。私有启动器明确 Set-Location 后重试。证据 `installer-finalpackage-before-cwd-fix.json`、`final-runner-meta.json`。发布后 main 的验收脚本补 `git -C $repo`，避免依赖提权目录；此工具修正不移动标签或重新构建已发布包。
+- **最终标签包安装复验：通过**。用户要求重发 UAC，10:21:58 至 10:22:14 `-Phase FinalPackage -Execute` 退出码 0，15 个断言 true、Failure=null、OriginalDataRestored=true。确认标签/清单/最终哈希，暂停自动重连，实际重装最终包；暂停配置与原凭据密文保留，六个安装运行文件及 README 与标签载荷一致，正式自包含 WPF 响应/密码遮蔽，恢复三个原开关和密文。证据 `installer-finalpackage.json`、`ui-installed-tagged-final.json`。本轮不新增人工真实认证或校园跨夜样本。
+- **独立回读及备份清理：通过**。10:23:53 清理调用退出码 0，独立确认正式服务 Running/延迟 Auto、原三个开关开启、凭据存在/密文不变、防睡眠有效；核对固定受保护备份后删除，BackupRemoved=true、Failure=null。证据 `inspection-published-final.json`、`backup-cleanup.json`。未保留额外真实凭据备份到仓库或安装包。
+- **GitHub 草稿及过程失败**。已有 GitHub 凭据仅用于临时子进程环境，不输出/持久化令牌；草稿创建及两份附件上传退出码 0。按 tag 查询草稿的 API 返回 404，改用有权访问的 Release 列表；Windows PowerShell 原生参数处理又使带引号的 jq 标签筛选解析失败，改为 PowerShell JSON 筛选。两次只读失败未公开或替换附件；最终草稿回读确认 2 个附件、服务器 SHA-256/字节数与本机实测包一致。证据 `release-draft-readback.json`。
+- **公开及真实下载核验：通过**。公开 prerelease、latest=false，调用退出码 0；已授权公开，无额外发布确认。Release ID `400598315`，draft=false、prerelease=true；不带账号凭据的公共 API 回读通过，[实际 Release 页面](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1) 可公开读取。实际下载安装包及 sha256.txt，10:28:14 校验安装包 SHA-256 和大小与最终实测包一致，校验文件内容完全一致。证据 `release-published-readback.json`、`release-public-readback.json`、`release-download-verification.json`。本次手动标签构建/发布，无 Actions 自动发布证据。
+- **验收边界**：7 项安全拒绝和 35 项完整本机生命周期针对候选包，15 项复验针对最终标签包。测试 preview.0 是本轮载荷的安装器版本基线，不证明历史旧代码迁移；干净 Windows 不可用，完整 M5/稳定版未完成。安装版额外开机、卸载后重启、其他机器/DPI、更多失败组合和多夜稳定性未验证。一晚恢复维持用户现场反馈等级，不补成事件时间线。
+- **发布后验收工具检查：通过**。显式 Git 仓库路径修正的 PowerShell 解析、默认无修改计划与从 system32 查 HEAD/发布标签均通过，命令退出码 0；仓库结构/忽略项、六份更新文档的本地链接和差异空白检查通过。仅同步辅助工具与脱敏文档，不重新构建或替换已经实测/发布的标签附件。main 的最终推送状态以远端回读为准，发布标签保持上述提交。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

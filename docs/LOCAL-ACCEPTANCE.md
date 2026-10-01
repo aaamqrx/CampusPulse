@@ -2,6 +2,8 @@
 
 基线：公开 `main` 提交 `8f52264`；本轮修复及验收记录已推送并回读源码提交 `c557257d5b5a74b1e85f23697387cd422c0c698d`。Windows 11 x64，Build 26200。真实密码只由用户在本机维护。
 
+**最新状态（2026-10-01）**：本机现场项按本文范围完成；候选包安全拒绝 7/7、生命周期 35/35，最终干净标签包复验 15/15、退出码 0。[公开预发布版](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1) 和实际下载已核验。正式产品运行，原三个开关/凭据密文恢复，受保护备份已清理。以下日间/晚间条目保留当时证据和未完成状态，最新结果见文末；无需重复现场测试。干净 Windows、历史旧代码迁移及完整 M5 未完成。
+
 ## 已执行
 
 - 只读后台：Running、LocalSystem、延迟 Auto；三个开关均为 true，已保存凭据；系统防睡眠请求存在。
@@ -20,9 +22,9 @@
 
 最近 80 条后台事件已回读，最早为 09-30 10:32:57（北京时间），11:39:49 后有两项公网探测成功记录；没有夜间断网及认证时间线。用户接受的一晚跨夜结果仍按现场反馈记录，不补成事件佐证或多夜验证。
 
-日间原生验收针对 09-29 临时副本；21:06 已部署新 SecureStore 修复版，三个运行文件哈希匹配，并完成下述故障验收。安装器动作尚未执行，不得用此页把 M4/M5 整体标为完成。
+日间原生验收针对 09-29 临时副本；21:06 已部署新 SecureStore 修复版，三个运行文件哈希匹配，并完成下述故障验收。10-01 安装器和最终包结果见文末，未执行的完整矩阵不标为完成。
 
-## 正在准备的现场项
+## 09-30 现场检查过程（当时状态）
 
 - PWR-03：通过。用户确认拔下充电器并接回，网线不动。只读采样 19 条：12:52:54 进入电池供电，12:52:56 起防睡眠状态和系统请求均释放，12:53:09 插电后均恢复；后台持续 Running，前后电源计划一致。证据 `power-result.json`。
 - SYS-04 锁屏部分：用户确认按 Win+L 锁屏约 20 秒并解锁；12:56:26 至 12:57:27 的 30 个只读样本均显示后台 Running，电源计划不变。证据 `lock-result.json` 及用户现场反馈。未单独观察屏幕自动关闭或托盘菜单操作。
@@ -40,7 +42,7 @@ PWR-01 本机一次插电空闲验收：通过。原插电空闲睡眠时限 300
 
 在项目目录运行。首版受限通道需要管理员；`-Elevate` 通过本机 UAC，不会将密码传入命令。
 
-- `powershell -NoProfile -File scripts/inspect-local.ps1 -Elevate`：只读后台、权限和近期事件。
+- `powershell -NoProfile -File scripts/inspect-local.ps1 -Target Installed -Elevate`：当前正式安装版的只读后台、权限和近期事件；默认 Validation 面向历史临时服务。
 - `powershell -NoProfile -File scripts/inspect-ui.ps1 -Elevate`：只读正式界面白名单控件。
 - `powershell -NoProfile -File scripts/validate-ui-window.ps1 -Elevate`：仅操作脚本自己的正式窗口，不保存设置、不提交认证；完整托盘交互仍需另验。
 - `powershell -NoProfile -File scripts/inspect-sleep-report.ps1 -Elevate`：只读生成系统 SleepStudy XML，留在忽略目录；报告生成不等于防睡眠验收通过。
@@ -70,7 +72,7 @@ PWR-01 本机一次插电空闲验收：通过。原插电空闲睡眠时限 300
 
 SEC-02 追加离线范围：假密码保存后，分别模拟拒绝响应正文回显密码/含密码 URL，以及 HttpRequestException 携带完整模拟请求 URL。两个场景均只发一次进程内假认证；检查持久化配置/凭据/事件、status 回复和正式复制功能共用的诊断文本，未发现明文密码标记或 user_password 参数。四项目 Release 0 警告/错误、30/30 离线检查通过，退出码 0，证据 `check-dev-diagnostic-security.txt`。未操作用户剪贴板、访问真实校园接口或宣称完成所有异常组合；模拟文件清理完成。
 
-当前接力点（2026-10-01）：本机现场项已按上述范围取得结果，不再安排第三次重启。09-30 23:44 新候选包完成自包含发布和 Inno 编译，30/30 离线检查通过；SHA-256 `0a534bcc407213c3aa00a8d929a14b60c4f8ec4972c265e5315f61bd4cc26ae6`，NotSigned。安装器新增安装/卸载服务路径核对。`validate-installation.ps1` 语法和默认无修改计划通过；Preflight 实际启动仍在等待 UAC，尚无结果，不标为拒绝检查通过。受保护备份及生命周期阶段未执行。用户没有干净 Windows 环境，缺口保留；Release 未发布。原始/脱敏证据均留在忽略目录，不上传。
+历史接力点（2026-10-01 00:01）：本机现场项按上述范围取得结果，不再安排第三次重启；当时候选 SHA-256 `0a534bcc407213c3aa00a8d929a14b60c4f8ec4972c265e5315f61bd4cc26ae6`，NotSigned，Preflight 等待 UAC、生命周期与 Release 未完成。之后实际结果见下文。此候选包不作为最终交付，原始/脱敏证据均留忽略目录。
 
 后续生命周期入口：`powershell -NoProfile -File scripts/validate-installation.ps1 -Phase Lifecycle -Execute -Elevate`；须先取得 Preflight 成功结果。固定范围为有标记的临时服务、默认 Program Files 安装目录、三份产品数据文件及产品快捷方式；先验证仅 SYSTEM/Administrators 的备份，再暂停认证及移除临时服务。安装测试基线、升级到候选包、重复安装、原生窗口、实际卸载、保留无关文件、重新安装及恢复原设置/加密凭据。测试用 preview.0 安装器使用本轮应用载荷，仅验证安装器跨版本流程，不能当作历史旧代码迁移验收。失败时尝试恢复，未结束的安装器不得与恢复竞跑；`-Phase Restore -Execute -Elevate` 提供中断后的明确恢复入口。脚本准备不等于执行通过。
 
@@ -84,4 +86,11 @@ SEC-02 追加离线范围：假密码保存后，分别模拟拒绝响应正文�
 - 证据 `.local/acceptance-20260930/installer-preflight.json`、`installer-lifecycle.json`、`ui-installed-final.json`、`ui-disconnected-password-fix.json`、`inspection-installed-restored.json` 和各安装日志，不上传。
 - 范围：这是本机已有开发环境中的产品首次安装/生命周期，未预装 .NET 的干净 Windows 未验证。preview.0 为当前载荷的安装器版本基线，不是历史发布源码；旧代码迁移、取消安装/提权、磁盘满/占用失败、中文自定义路径、卸载后重启等未验证。首个预览版仅按基础本机范围继续发布，完整 M5/稳定版门槛保持未完成。
 
-下一步：保存源码及记录，创建发布标签，从标签重新全量构建；执行 `validate-installation.ps1 -Phase FinalPackage -Execute -Elevate` 对最终新包复验，认证暂停期间保留凭据并恢复原三开关，然后创建草稿、校验附件后公开 prerelease。不得将候选校验值冒充最终标签包校验值。
+## 2026-10-01 最终标签包与公开下载结果
+
+- 干净标签 `v0.1.0-preview.1` / 提交 `dd2dc1e4ae5198a095e18ee55b2632a03ba74b2d` 于 10:17 完成全量构建，退出码 0；四项目 Release 0 警告/错误，30/30 离线检查，自包含发布及 Inno 编译通过。最终包 SHA-256 `4bba4fa53113da88e110586f6fe192d97998b3fcb8bc405e2f17df3e2402a575`，79,264,751 字节，NotSigned；源清单标签/提交/干净状态一致。
+- UAC 取消后经用户要求重发；中间一次提权检查因默认目录 system32 无法定位 Git 仓库终止，未改开关/数据。启动器明确仓库目录后，10:21:58 至 10:22:14 FinalPackage 退出码 0，15 个断言通过、Failure=null、OriginalDataRestored=true。真实密文保持不变，自动重连短暂暂停后恢复，六个已安装 App/Service/Core 文件及 README 与最终载荷一致，正式自包含 WPF 响应/密码遮蔽。main 的工具修正将 Git 调用改为显式 `-C $repo`，不改变发布标签或包。
+- 10:23:53 独立检查与受保护备份清理退出码 0：正式服务 Running/延迟 Auto，原三个开关 true、HasPassword=true、防睡眠有效，CredentialBytesUnchanged=true、BackupRemoved=true。无需重复恢复操作。
+- GitHub 草稿上传两份附件后核对服务器校验值，随后公开 prerelease、latest=false；不带账号凭据的公共 API 回读成功。10:28:14 实际下载的安装包及 sha256.txt 分别与本机最终包/校验文件一致。实际页面：[v0.1.0-preview.1](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1)。
+- 证据均留忽略目录：`build-final-tag.txt`、`installer-finalpackage.json`、`installer-finalpackage-before-cwd-fix.json`、`ui-installed-tagged-final.json`、`inspection-published-final.json`、`backup-cleanup.json`、`release-draft-readback.json`、`release-published-readback.json`、`release-public-readback.json`、`release-download-verification.json`。
+- 本次交付完成，剩余干净 Windows、历史旧代码迁移、安装版额外开机、卸载后重启、其他机器/DPI 及更多失败组合保持未验证。仅一晚校园恢复按用户现场反馈接受，不宣称多夜。完整 M5、稳定版与 Actions 自动发布未完成。

@@ -180,9 +180,9 @@ try {
     if ($Phase -eq 'Restore') { Restore-Original }
     elseif ($Phase -eq 'FinalPackage') {
         $service = Assert-ServicePath $productExe
-        $currentCommit = (& git -c "safe.directory=$repo" rev-parse HEAD | Out-String).Trim()
+        $currentCommit = (& git -C $repo -c "safe.directory=$repo" rev-parse HEAD | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Cannot verify current source commit' }
-        $tagCommit = (& git -c "safe.directory=$repo" rev-list -n 1 v0.1.0-preview.1 | Out-String).Trim()
+        $tagCommit = (& git -C $repo -c "safe.directory=$repo" rev-list -n 1 v0.1.0-preview.1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Cannot verify release tag commit' }
         Assert-Check ($manifest.sourceDirty -eq $false -and $manifest.sourceTags -contains 'v0.1.0-preview.1' -and
             $manifest.sourceCommit -eq $currentCommit -and $currentCommit -eq $tagCommit) 'Final build comes from the current clean release tag'
