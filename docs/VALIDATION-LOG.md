@@ -299,6 +299,22 @@
 - **数据恢复与回滚边界**：普通卸载按既有设计删除三份产品数据；迁移工具从 `C:\ProgramData\CampusPulse-ReleaseBackup-20261004` 私有完整备份恢复暂停配置和密文，再启动新安装，最后恢复原设置。备份未写入项目/包/日志。现保留两份受保护备份，发布后可按固定标记及非链接路径安全清理。失败 Restore 分支已实测，不代表任意崩溃或干净机恢复。
 - **未完成**：干净标签构建和最终包复验、新版 GitHub 上传与公开下载回读；干净 Windows、其他机器/DPI、多夜、卸载后重启未测试。本轮安装测试未触发真实校园认证、断开网络、重启或改变电源计划。
 
+## 2026-10-04 R6 干净标签最终包、独立复核与公开预发布完成
+
+- **最终干净标签构建：通过**。源码提交 `58bc8f03ba97d22a9089e918ebb0cce62f4f20ea`、annotated tag `v0.1.0-preview.2`，构建清单 sourceDirty=false、sourceTags 对应本标签。`scripts/build.ps1 -Version 0.1.0-preview.2` 退出码 0，四项目 Release 构建 0 警告/0 错误，43/43 离线检查、自包含 App/Service 及 Inno 编译通过。最终安装包 79,276,352 字节、NotSigned，SHA-256 `4480aaffd22ff601d4a089e4b9a45ae6ac7cc7fae01b743ff77e3916cc224f28`。候选包与最终包哈希不同，未用候选冒充最终包。旧三个产物与 preview.1 标签回读保持不变；证据 `final-tag-build.txt`、`final-tag-build-result.json`、版本隔离清单。
+- **FinalPackage：通过**。`scripts/validate-preview2-installation.ps1 -Phase FinalPackage -Execute -Elevate` 在 13:47:38–13:47:54 完成，父调用和子记录 ProcessExitCode=0，750/750 核对、Failure=null、OriginalProfileRestored=true。复验确切 clean tag/manifest/包 SHA、E 盘重装、逐文件载荷/ACL、原设置/密文、正式原生窗口版本/三个开关/遮蔽输入/响应、Online 和防睡眠。原 Automatic 提交时间/结果摘要保持不变；本轮没有主动认证。证据 `installer-finalpackage.json` 与 `install-final-tagged-package.log`。
+- **独立系统复核与临时备份清理：通过**。`verify-and-cleanup.ps1 -Execute -Elevate`，Verified=true、Failure=null；另回读 LocalSystem/Running 的固定 E 服务，二进制产品版本含 `58bc8f03ba97d22a9089e918ebb0cce62f4f20ea`，桌面/开始菜单快捷方式指向 E App，旧 C 程序目录不存在，原三个开关/密码密文、Online、ActualStartWithWindows、防睡眠均符合原配置；没有新增认证提交。核对两份本轮临时备份的固定路径、标记、私有 ACL 及整棵树无链接后，仅删除 `CampusPulse-RecoveryBackup-20261003` 与 `CampusPulse-ReleaseBackup-20261004`。正式 ProgramData/凭据和 E 程序未删除；证据 `independent-final-cleanup.json`。
+- **公开源码及标签：通过**。23 个实际变动文件显式暂存，29 个文档本地链接/围栏、三份 PowerShell 解析、差异检查及已知秘密模式检查通过（有限模式检查，不是全面安全审计）；`.local/.tools/artifacts` 未提交。源码提交和新 annotated tag 已推送，远端 main 与 tag peeled commit 回读一致；旧 preview.1 tag ref 不变。发布后更新交接/验证文档及只读排查入口，标签不移动、安装包不替换；应用与服务二进制仍对应最终标签。
+- **GitHub 新版发布与下载：通过**。[v0.1.0-preview.2](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.2)，Release id `402863864`，draft=false、prerelease=true；两份附件为安装包和 sha256.txt。上传先建立草稿并核对附件大小/digest，随后公开，已登录 API 元数据、匿名公开 Release 页面及实际下载回读通过；匿名 API 尝试因配额限流失败，不记为匿名 API 通过；下载 79,276,352 字节，SHA-256 与本机实测最终包一致，校验文本逐字节一致。已有 Git 凭据只在子进程环境中临时使用，未输出/持久化令牌。证据 `release-draft-readback.json`、`release-publish-readback.json`、`release-public-readback.json`、`release-download-verification.json`。
+- **验证边界**：本次为本机受影响功能的一晚真实自动恢复、本机安装生命周期及最终包/发布回读。没有干净 Windows、其他机器/运营商/DPI、额外重启/卸载后重启、多夜稳定、任意崩溃恢复或完整 M5/稳定版证明。真实密码只存在用户本机受保护数据，没有进入 Git 或发布附件。两次迁移检查失败及回滚恢复保留前节历史。
+
+## 2026-10-04 发布后交接与只读检查入口
+
+- **交接与文件检查**：同步 README、HANDOFF、LOCAL-ACCEPTANCE、修复计划、TESTING 和本记录。辅助更新曾因原句匹配不同及 PowerShell JSON 的 UTF-16 编码失败；修正精确原句匹配/按 BOM 解码后完成，没有改变最终包或移动标签。最终文档链接/围栏、差异与已知秘密模式检查通过；证据 `postrelease-check.json`。不是全量秘密审计。
+- **自选目录的只读入口**：修正 `inspect-local.ps1 -Target Installed` 使用固定 Inno 产品注册的 InstallLocation 核对精确 LocalSystem 服务路径，并拒绝链接祖先；Installed 输出移至 `.local/installed-inspection/`，不覆盖旧验收证据。只读入口不执行注册路径、不改设置、不提交密码。完整命令的最后 Windows UAC 被取消，父调用退出码 1，未读取受保护数据，不再重复弹窗。
+- **安全替代验证：通过有限范围**：PowerShell 解析通过；从修改后的真实源码 AST 提取并执行安装注册路径选择分支（不含提权或管道调用），实际匹配 `E:\Apps\CampusPulse\Service\CampusPulse.Service.exe`，退出码 0。证据 `inspect-custom-target.json`。这不是完整管理员只读检查通过；前述独立最终系统复核和安装结果不受此取消影响。
+- **发布边界**：发布后提交仅含交接/验收文档及此只读工具；没有改应用或服务二进制。最终包和标签仍来自 `58bc8f03ba97d22a9089e918ebb0cce62f4f20ea`。Git main 后续提交单独推送回读，旧/新发布标签和已公开附件保持不变。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

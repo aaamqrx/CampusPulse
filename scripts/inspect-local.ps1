@@ -4,7 +4,7 @@ param([switch]$Elevate, [ValidateSet('Validation', 'Installed')][string]$Target 
 # Read-only acceptance evidence. Never serialize the full settings or credentials.
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$evidenceDirectory = Join-Path $repo '.local\acceptance-20260930'
+$evidenceDirectory = Join-Path $repo $(if ($Target -eq 'Installed') { '.local\installed-inspection' } else { '.local\acceptance-20260930' })
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if (-not $Elevate) { throw 'Administrator required. Use -Elevate for local UAC.' }
@@ -22,9 +22,19 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
 try {
     $service = Get-CimInstance Win32_Service -Filter "Name='CampusPulse'"
-    $expectedRelative = if ($Target -eq 'Installed') { 'CampusPulse\Service\CampusPulse.Service.exe' } else { 'CampusPulse-Validation\CampusPulse.Service.exe' }
+    if ($Target -eq 'Installed') {
+        # Match the fixed product registration; inspection never executes its path.
+        $registration = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{DB15D4E6-9CD2-47E0-A4EF-1529703B831A}_is1'
+        $installRoot = [IO.Path]::GetFullPath($registration.InstallLocation).TrimEnd('\')
+        $expectedExe = Join-Path $installRoot 'Service\CampusPulse.Service.exe'
+        $ancestor = $installRoot
+        while ($ancestor) {
+            if ((Test-Path -LiteralPath $ancestor) -and ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Linked installed root refused' }
+            $ancestor = Split-Path -Parent $ancestor
+        }
+    } else { $expectedExe = Join-Path $env:ProgramFiles 'CampusPulse-Validation\CampusPulse.Service.exe' }
     if ($null -eq $service -or $service.PathName.Trim('"') -ne
-        (Join-Path $env:ProgramFiles $expectedRelative)) {
+        $expectedExe -or $service.StartName -ne 'LocalSystem') {
         throw 'Unexpected service target'
     }
     $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'CampusPulse.Control.v1', [IO.Pipes.PipeDirection]::InOut)
