@@ -7,6 +7,11 @@ var store = new SecureStore();
 store.Initialize();
 if (args is ["--initialize-store"])
     return;
+if (args is ["--protect-install-directory"])
+{
+    InstallationSecurity.ProtectCurrentInstallation();
+    return;
+}
 if (args.Length != 0)
     throw new ArgumentException("Unsupported service argument.");
 

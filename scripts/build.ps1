@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(?:-preview\.\d+)?$')]
-    [string]$Version = '0.1.0-preview.1',
+    [string]$Version = '0.1.0-preview.2',
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
     [string]$DotNetPath,
@@ -12,7 +12,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$artifactsRoot = Join-Path $repoRoot 'artifacts'
+$artifactsRoot = Join-Path (Join-Path $repoRoot 'artifacts') $Version
 $installerRoot = Join-Path $artifactsRoot 'installer'
 $installer = Join-Path $installerRoot "CampusPulse-Setup-$Version.exe"
 $checksumPath = Join-Path $installerRoot 'sha256.txt'
@@ -81,6 +81,10 @@ function Assert-PublishPayload {
     if ($forbidden.Count) { throw "Unexpected user data or secret-like file in $Component publish output." }
 }
 
+# Reject the wrong version before entering artifact cleanup, including its failure cleanup.
+$productSource = Get-Content -LiteralPath (Join-Path $repoRoot 'src\CampusPulse.Core\Contracts.cs') -Raw
+$productVersion = [regex]::Match($productSource, 'public const string Version = "([^"]+)";').Groups[1].Value
+if ($productVersion -ne $Version) { throw 'Build version must match ProductInfo.Version in the source.' }
 Push-Location $repoRoot
 try {
     # Invalidate old success artifacts before checking tools or source files.
@@ -143,7 +147,9 @@ try {
         Assert-SafeArtifactPath $installerRoot | Out-Null
         New-Item -ItemType Directory -Path $installerRoot -Force | Out-Null
         $numericVersion = ($Version -split '-')[0] + '.0'
-        Invoke-Checked $InnoCompilerPath @("/DAppVersion=$Version", "/DAppNumericVersion=$numericVersion", (Join-Path $repoRoot 'installer\CampusPulse.iss'))
+        Invoke-Checked $InnoCompilerPath @("/DAppVersion=$Version", "/DAppNumericVersion=$numericVersion",
+            "/DPublishRoot=$(Join-Path $artifactsRoot 'publish')", "/DInstallerOutputRoot=$installerRoot",
+            (Join-Path $repoRoot 'installer\CampusPulse.iss'))
         if (-not (Test-Path -LiteralPath $installer -PathType Leaf) -or (Get-Item -LiteralPath $installer).Length -eq 0) {
             throw "Expected installer missing or empty: $installer"
         }

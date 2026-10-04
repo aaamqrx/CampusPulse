@@ -69,12 +69,24 @@ internal sealed class ControlPipeServer(ConnectionWorker worker) : BackgroundSer
 
     private static async Task ReplyAsync(NamedPipeServerStream pipe, ServiceReply reply, CancellationToken token)
     {
-        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(reply);
-        if (bytes.Length > MaximumMessageBytes)
-            bytes = JsonSerializer.SerializeToUtf8Bytes(new ServiceReply(false, "状态过长，请稍后刷新"));
+        byte[] bytes = EncodeReply(reply);
         await pipe.WriteAsync(bytes, token);
         await pipe.WriteAsync(new byte[] { (byte)'\n' }, token);
         await pipe.FlushAsync(token);
+    }
+
+    internal static byte[] EncodeReply(ServiceReply reply)
+    {
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(reply);
+        // Keep the independent failure summary when optional recent events exceed the pipe budget.
+        while (bytes.Length > MaximumMessageBytes && reply.Snapshot is { RecentEvents.Count: > 0 } snapshot)
+        {
+            reply = reply with { Snapshot = snapshot with { RecentEvents = snapshot.RecentEvents.Take(snapshot.RecentEvents.Count - 1).ToArray() } };
+            bytes = JsonSerializer.SerializeToUtf8Bytes(reply);
+        }
+        if (bytes.Length > MaximumMessageBytes)
+            bytes = JsonSerializer.SerializeToUtf8Bytes(new ServiceReply(false, "状态过长，请稍后刷新"));
+        return bytes;
     }
 
     private static NamedPipeServerStream CreatePipe()

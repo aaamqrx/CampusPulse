@@ -2,7 +2,11 @@
 
 基线：公开 `main` 提交 `8f52264`；本轮修复及验收记录已推送并回读源码提交 `c557257d5b5a74b1e85f23697387cd422c0c698d`。Windows 11 x64，Build 26200。真实密码只由用户在本机维护。
 
-**最新状态（2026-10-01）**：本机现场项按本文范围完成；候选包安全拒绝 7/7、生命周期 35/35，最终干净标签包复验 15/15、退出码 0。[公开预发布版](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1) 和实际下载已核验。正式产品运行，原三个开关/凭据密文恢复，受保护备份已清理。以下日间/晚间条目保留当时证据和未完成状态，最新结果见文末；无需重复现场测试。干净 Windows、历史旧代码迁移及完整 M5 未完成。
+**最新状态（2026-10-04）：修复版一晚自然跨夜验收通过，新版已迁至 `E:\Apps\CampusPulse`，等待最终标签包复验和发布。** 四项目构建 0 警告/0 错误，43/43 离线检查通过；候选 preview.2 完成本机 C 盘升级、E 盘安装/重装/卸载/恢复，2222/2222 核对通过。原设置、密码密文及三个开关保留，服务 Running/延迟 Auto、Online、防睡眠有效，新版原生界面核对通过。10-04 经明确重新授权的安装操作取得脱敏诊断：10-03 23:31:59 模糊拒绝后持续重试，10-04 05:31:22 Automatic 认证成功，05:31:25 首次公网恢复；与用户反馈“验收成功”相符。旧 preview.1 失败及两次迁移工具失败保留历史，不推断旧首次响应或学校实际开网时刻；多夜、干净 Windows 和其他机器仍未验证。 详见 [验证记录](VALIDATION-LOG.md)。
+
+**修复复验准备历史（2026-10-03 18:23）：本机正式 Service 换为 `0.1.0-preview.2-dev`。** 四项目构建和 43/43 离线检查通过；234 项只读预检、705 项后台替换核对与 16 项候选界面连接正式后台的原生核对通过。原三个开关、凭据密文、后台在线和防睡眠状态保留，更新期间未提交认证。当时正式后台仍在 C 盘、用户 App 未覆盖，跨夜尚未开始；后续 10-04 成功以本页最新状态为准。
+
+**2026-10-01 安装与系统验收历史**：本机现场项按本文范围完成；候选包安全拒绝 7/7、生命周期 35/35，最终干净标签包复验 15/15、退出码 0。[公开预发布版](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1) 和实际下载已核验。正式产品运行，原三个开关/凭据密文恢复，受保护备份已清理。以下日间/晚间条目保留当时证据和未完成状态，最新结果见文末；无需重复现场测试。干净 Windows、历史旧代码迁移及完整 M5 未完成。
 
 ## 已执行
 
@@ -93,4 +97,4 @@ SEC-02 追加离线范围：假密码保存后，分别模拟拒绝响应正文�
 - 10:23:53 独立检查与受保护备份清理退出码 0：正式服务 Running/延迟 Auto，原三个开关 true、HasPassword=true、防睡眠有效，CredentialBytesUnchanged=true、BackupRemoved=true。无需重复恢复操作。
 - GitHub 草稿上传两份附件后核对服务器校验值，随后公开 prerelease、latest=false；不带账号凭据的公共 API 回读成功。10:28:14 实际下载的安装包及 sha256.txt 分别与本机最终包/校验文件一致。实际页面：[v0.1.0-preview.1](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1)。
 - 证据均留忽略目录：`build-final-tag.txt`、`installer-finalpackage.json`、`installer-finalpackage-before-cwd-fix.json`、`ui-installed-tagged-final.json`、`inspection-published-final.json`、`backup-cleanup.json`、`release-draft-readback.json`、`release-published-readback.json`、`release-public-readback.json`、`release-download-verification.json`。
-- 本次交付完成，剩余干净 Windows、历史旧代码迁移、安装版额外开机、卸载后重启、其他机器/DPI 及更多失败组合保持未验证。仅一晚校园恢复按用户现场反馈接受，不宣称多夜。完整 M5、稳定版与 Actions 自动发布未完成。
+- 2026-10-01 的构建、安装和公开发布工作完成；10-03 自动恢复验收失败，优先修复及复验。剩余干净 Windows、历史旧代码迁移、安装版额外开机、卸载后重启、其他机器/DPI 及更多失败组合保持未验证。仅一晚校园恢复按用户现场反馈接受，不宣称多夜。完整 M5、稳定版与 Actions 自动发布未完成。

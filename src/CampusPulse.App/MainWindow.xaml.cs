@@ -128,10 +128,13 @@ public partial class MainWindow : Window
             ActualAutostartText.Text += " · 与保存设置不一致";
         AwakeText.Text = snapshot.KeepingAwake ? "防睡眠生效中（允许息屏）"
             : snapshot.Settings.UnattendedMode ? "已启用，当前未持有防睡眠请求" : "未启用";
-        BlockedText.Visibility = snapshot.Settings.AuthenticationBlocked ? Visibility.Visible : Visibility.Collapsed;
-        BlockedText.Text = "自动认证已受保护暂停。请核对并重新保存凭据，或点击“立即重连”手动重试一次。";
+        bool uncertainRejection = snapshot.Settings.BlockedReasonCode is "legacy_unconfirmed" or "unconfirmed_rejection";
+        BlockedText.Visibility = snapshot.Settings.AuthenticationBlocked || uncertainRejection ? Visibility.Visible : Visibility.Collapsed;
+        BlockedText.Text = uncertainRejection
+            ? $"认证拒绝原因未确认，计划 {FormatTime(snapshot.Settings.AuthenticationRetryAt, "稍后")} 自动复查；无需重新输入密码。"
+            : "自动认证已受保护暂停。请核对账号状态，或点击“立即重连”手动重试一次。";
         EventsList.ItemsSource = snapshot.RecentEvents.OrderByDescending(entry => entry.Time)
-            .Select(entry => new EventRow(FormatTime(entry.Time), entry.Message)).ToArray();
+            .Select(entry => new EventRow(FormatTime(entry.Time), DiagnosticText.FormatEvent(entry))).ToArray();
         NoEventsText.Visibility = snapshot.RecentEvents.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PasswordHint.Text = snapshot.HasPassword
             ? "已保存密码。更换账号、运营商或登录地址须重新输入密码。"
@@ -321,7 +324,7 @@ public partial class MainWindow : Window
         if (_snapshot is null || _snapshot.RecentEvents.Count == 0) return;
         try
         {
-            System.Windows.Clipboard.SetText(DiagnosticText.Format(_snapshot.RecentEvents));
+            System.Windows.Clipboard.SetText(DiagnosticText.Format(_snapshot));
             Feedback("已复制脱敏事件记录。");
         }
         catch (System.Runtime.InteropServices.ExternalException)

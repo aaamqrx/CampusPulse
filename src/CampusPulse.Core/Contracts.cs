@@ -13,6 +13,8 @@ public sealed record CampusSettings
     public int OnlineCheckSeconds { get; init; } = 120;
     public bool AuthenticationBlocked { get; init; }
     public string BlockedReason { get; init; } = "";
+    public string BlockedReasonCode { get; init; } = "";
+    public DateTimeOffset? AuthenticationRetryAt { get; init; }
 }
 
 public enum ConnectionState
@@ -21,7 +23,25 @@ public enum ConnectionState
     Online, AuthenticationRejected, PortalUnavailable, LimitedConnectivity, IntranetOnline
 }
 
-public sealed record StatusEntry(DateTimeOffset Time, string Message);
+public sealed record StatusEntry(DateTimeOffset Time, string Message)
+{
+    // Empty metadata denotes a legacy event; never infer a submission from its message.
+    public string Kind { get; init; } = "";
+    public string ReasonCode { get; init; } = "";
+    public string Source { get; init; } = "";
+}
+
+public sealed record AuthenticationDiagnostics
+{
+    public DateTimeOffset? FirstRejectionAt { get; init; }
+    public string FirstRejectionReasonCode { get; init; } = "";
+    public string FirstRejectionSource { get; init; } = "";
+    public DateTimeOffset? LastSubmissionAt { get; init; }
+    public string LastSubmissionSource { get; init; } = "";
+    public string LastSubmissionResultCode { get; init; } = "";
+    public DateTimeOffset? LastResultAt { get; init; }
+    public DateTimeOffset? RejectionResolvedAt { get; init; }
+}
 
 public sealed record ServiceSnapshot
 {
@@ -35,6 +55,7 @@ public sealed record ServiceSnapshot
     public bool KeepingAwake { get; init; }
     public bool? ActualStartWithWindows { get; init; }
     public string ErrorCode { get; init; } = "";
+    public AuthenticationDiagnostics Diagnostics { get; init; } = new();
     public IReadOnlyList<StatusEntry> RecentEvents { get; init; } = [];
 }
 
@@ -45,5 +66,5 @@ public static class ProductInfo
 {
     public const string ServiceName = "CampusPulse";
     public const string PipeName = "CampusPulse.Control.v1";
-    public const string Version = "0.1.0-preview.1";
+    public const string Version = "0.1.0-preview.2";
 }

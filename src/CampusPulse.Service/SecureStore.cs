@@ -14,7 +14,10 @@ internal sealed record StoredCredential(string Username, string Password)
     public string PortalUrl { get; init; } = CampusSettings.SupportedPortal;
     public int ProtocolVersion { get; init; } = 1;
 }
-internal sealed record EventHistory(DateTimeOffset? LastSuccess, List<StatusEntry> Entries);
+internal sealed record EventHistory(DateTimeOffset? LastSuccess, List<StatusEntry> Entries)
+{
+    public AuthenticationDiagnostics Diagnostics { get; init; } = new();
+}
 
 internal sealed class SecureStore
 {
@@ -119,13 +122,23 @@ internal sealed class SecureStore
     {
         var path = SafePath("events.json");
         if (!File.Exists(path) || new FileInfo(path).Length > 131072) return new(null, []);
-        try { return JsonSerializer.Deserialize<EventHistory>(File.ReadAllText(path)) ?? new(null, []); }
+        try
+        {
+            var history = JsonSerializer.Deserialize<EventHistory>(File.ReadAllText(path));
+            return history is null ? new(null, []) : history with
+            {
+                Entries = history.Entries ?? [],
+                Diagnostics = history.Diagnostics ?? new()
+            };
+        }
         catch (JsonException) { return new(null, []); }
     }
 
-    public void SaveHistory(DateTimeOffset? lastSuccess, IEnumerable<StatusEntry> events) =>
+    public void SaveHistory(DateTimeOffset? lastSuccess, IEnumerable<StatusEntry> events,
+        AuthenticationDiagnostics? diagnostics = null) =>
         AtomicWrite("events.json", JsonSerializer.SerializeToUtf8Bytes(new EventHistory(lastSuccess,
-            events.Where(x => x.Time > DateTimeOffset.UtcNow.AddDays(-7)).TakeLast(80).ToList()), Json));
+            events.Where(x => x.Time > DateTimeOffset.UtcNow.AddDays(-7)).TakeLast(80).ToList())
+            { Diagnostics = diagnostics ?? new() }, Json));
 
     private byte[]? ReadOptional(string name) => File.Exists(SafePath(name)) ? File.ReadAllBytes(SafePath(name)) : null;
     private void Restore(string name, byte[]? bytes)

@@ -14,6 +14,8 @@ internal sealed class ConnectionWorker : BackgroundService
     private readonly SemaphoreSlim signal = new(0, 1);
     private readonly object sync = new();
     private readonly List<StatusEntry> events = [];
+    private AuthenticationDiagnostics diagnostics = new();
+    private (ConnectionState State, string Message, string Code, string Source, string Kind)? lastRecordedState;
     private CampusSettings settings = new();
     private StoredCredential? credential;
     private ServiceSnapshot snapshot = new();
@@ -34,10 +36,17 @@ internal sealed class ConnectionWorker : BackgroundService
         this.store = store; this.startup = startup; this.network = network;
         try
         {
-            settings = store.LoadSettings();
+            var loadedSettings = store.LoadSettings();
+            settings = AuthenticationRetryPolicy.NormalizePersistedBlock(loadedSettings, DateTimeOffset.UtcNow);
+            if (settings != loadedSettings) store.SaveSettings(settings);
             credential = store.LoadCredential(settings.Username, settings.Carrier, settings.PortalUrl);
             var history = store.LoadHistory();
             lastSuccess = history.LastSuccess;
+            diagnostics = history.Diagnostics;
+            if (settings.AuthenticationBlocked && string.IsNullOrEmpty(diagnostics.FirstRejectionReasonCode))
+                diagnostics = diagnostics with { FirstRejectionReasonCode = settings.BlockedReasonCode, FirstRejectionSource = "Unknown" };
+            if (diagnostics.LastSubmissionAt is { } lastSubmission)
+                nextAuthentication = lastSubmission.Add(RetryPolicy.MinimumAuthenticationInterval);
             events.AddRange(history.Entries.Where(x => x.Time > DateTimeOffset.UtcNow.AddDays(-7)).TakeLast(80));
             SetState(settings.AuthenticationBlocked ? ConnectionState.AuthenticationRejected :
                 settings.Enabled && credential is null ? ConnectionState.NeedsConfiguration : ConnectionState.Paused,
@@ -73,6 +82,9 @@ internal sealed class ConnectionWorker : BackgroundService
         if (request.Command == "status") return new(true, "状态已读取", Snapshot);
         if (request.Command is "check" or "reconnect")
         {
+            RecordEvent(request.Command == "check" ? "已安排一次只读检测" : "已安排一次按需主动重连",
+                "user_operation", request.Command == "check" ? "check_requested" : "reconnect_requested",
+                request.Command == "check" ? "ManualCheck" : "ManualReconnect");
             Trigger(request.Command == "reconnect");
             return new(true, request.Command == "check" ? "已安排只读网络检测" : "已安排一次必要的重连", Snapshot);
         }
@@ -93,9 +105,14 @@ internal sealed class ConnectionWorker : BackgroundService
             }
             if (request.Command == "deleteCredentials")
             {
-                var cleared = settings with { Enabled = false, Username = "", AuthenticationBlocked = false, BlockedReason = "" };
+                var cleared = settings with
+                {
+                    Enabled = false, Username = "", AuthenticationBlocked = false, BlockedReason = "",
+                    BlockedReasonCode = "", AuthenticationRetryAt = null
+                };
                 store.SaveConfiguration(cleared, null, deleteCredential: true);
                 settings = cleared; credential = null; nextCheck = null;
+                diagnostics = new(); lastRecordedState = null;
                 SetState(ConnectionState.NeedsConfiguration, "凭据已清除，自动重连已暂停");
                 Wake();
                 return new(true, "凭据已清除", Snapshot);
@@ -130,7 +147,9 @@ internal sealed class ConnectionWorker : BackgroundService
                 Username = name, OnlineCheckSeconds = Math.Clamp(desired.OnlineCheckSeconds, 30, 3600),
                 PortalUrl = portal.Root.AbsoluteUri,
                 AuthenticationBlocked = changedName || changedCarrier || changedPortal || changedPassword ? false : settings.AuthenticationBlocked,
-                BlockedReason = changedName || changedCarrier || changedPortal || changedPassword ? "" : settings.BlockedReason
+                BlockedReason = changedName || changedCarrier || changedPortal || changedPassword ? "" : settings.BlockedReason,
+                BlockedReasonCode = changedName || changedCarrier || changedPortal || changedPassword ? "" : settings.BlockedReasonCode,
+                AuthenticationRetryAt = changedName || changedCarrier || changedPortal || changedPassword ? null : settings.AuthenticationRetryAt
             };
             bool previousStartup = startup.Read();
             try
@@ -146,7 +165,8 @@ internal sealed class ConnectionWorker : BackgroundService
             settings = desired; credential = name.Length == 0 ? null : newCredential;
             if (changedName || changedCarrier || changedPortal) lastSuccess = null;
             actualStartup = startup.Read();
-            if (changedName || changedCarrier || changedPortal || changedPassword) { failures = 0; nextAuthentication = DateTimeOffset.MinValue; }
+            if (changedName || changedCarrier || changedPortal || changedPassword)
+            { failures = 0; nextAuthentication = DateTimeOffset.MinValue; diagnostics = new(); lastRecordedState = null; }
             nextCheck = settings.Enabled ? DateTimeOffset.UtcNow : null;
             SetState(settings.AuthenticationBlocked ? ConnectionState.AuthenticationRejected :
                 settings.Enabled ? ConnectionState.Checking : ConnectionState.Paused,
@@ -229,8 +249,12 @@ internal sealed class ConnectionWorker : BackgroundService
             finally
             {
                 lock (sync) activeCheck = null;
-                int seconds = failures == 0 ? settings.OnlineCheckSeconds : RetrySeconds[Math.Min(failures - 1, RetrySeconds.Length - 1)];
-                nextCheck = settings.Enabled ? DateTimeOffset.UtcNow.AddSeconds(seconds + (failures == 0 ? 0 : Random.Shared.Next(0, 6))) : null;
+                int seconds = failures == 0 ? settings.OnlineCheckSeconds :
+                    Math.Min(300, RetrySeconds[Math.Min(failures - 1, RetrySeconds.Length - 1)] + Random.Shared.Next(0, 6));
+                var now = DateTimeOffset.UtcNow;
+                nextCheck = settings.Enabled ? now.AddSeconds(seconds) : null;
+                if (settings.Enabled && failures > 0 && settings.AuthenticationRetryAt is { } retryAt && retryAt > now)
+                    nextCheck = retryAt < now.AddMinutes(5) ? retryAt : now.AddMinutes(5);
                 RefreshSnapshot(); operations.Release();
             }
         }
@@ -238,35 +262,50 @@ internal sealed class ConnectionWorker : BackgroundService
 
     private async Task CheckAsync(bool explicitReconnect, bool readonlyCheck, CancellationToken token)
     {
+        string source = explicitReconnect ? "ManualReconnect" : readonlyCheck ? "ManualCheck" : "Automatic";
+        if (!explicitReconnect && !readonlyCheck && !settings.Enabled)
+        { SetState(ConnectionState.Paused, "自动重连已暂停；本次未提交认证", "AutomaticPaused", source, "authentication_skipped"); return; }
         lastCheck = DateTimeOffset.UtcNow;
         SetState(ConnectionState.Checking, "正在检测校园有线网络");
         var check = await network.CheckAsync(settings.Carrier, settings.PortalUrl, token);
         token.ThrowIfCancellationRequested();
-        if (check.InternetAvailable) { MarkOnline(); return; }
+        if (check.InternetAvailable) { MarkOnline(source); return; }
         if (check.IntranetAvailable) { MarkIntranetOnline(); return; }
         if (check.PartialConnectivity)
-        { failures++; SetState(ConnectionState.LimitedConnectivity, check.Message, "PartialConnectivity"); return; }
+        { failures++; SetState(ConnectionState.LimitedConnectivity, check.Message, "PartialConnectivity", source, "authentication_skipped"); return; }
         if (!check.PortalRecognized)
-        { failures++; SetState(ConnectionState.WaitingNetwork, check.Message, "PortalUnrecognized"); return; }
+        { failures++; SetState(ConnectionState.WaitingNetwork, check.Message, "PortalUnrecognized", source, "authentication_skipped"); return; }
         if (!check.NeedsAuthentication)
-        { failures++; SetState(ConnectionState.LimitedConnectivity, check.Message, "AuthenticationNotRequiredOrUnknown"); return; }
+        { failures++; SetState(ConnectionState.LimitedConnectivity, check.Message, "AuthenticationNotRequiredOrUnknown", source, "authentication_skipped"); return; }
         if (readonlyCheck)
-        { SetState(ConnectionState.LimitedConnectivity, "检测到需要认证；本次仅检测，没有提交密码", "NeedsAuthentication"); return; }
-        if (settings.AuthenticationBlocked && !explicitReconnect)
-        { failures++; SetState(ConnectionState.AuthenticationRejected, settings.BlockedReason, "AuthenticationBlocked"); return; }
+        { SetState(ConnectionState.LimitedConnectivity, "检测到需要认证；本次仅检测，没有提交密码", "NeedsAuthentication", source, "authentication_skipped"); return; }
+        if (settings.AuthenticationBlocked && !explicitReconnect &&
+            !(AuthenticationRetryPolicy.AllowsLegacyRetry(settings) && settings.AuthenticationRetryAt is { } legacyRetry &&
+                legacyRetry <= DateTimeOffset.UtcNow))
+        { failures++; SetState(ConnectionState.AuthenticationRejected, settings.BlockedReason, "AuthenticationBlocked", source, "authentication_skipped"); return; }
+        if (!explicitReconnect && settings.AuthenticationRetryAt is { } automaticRetry && automaticRetry > DateTimeOffset.UtcNow)
+        { failures++; SetState(ConnectionState.LimitedConnectivity, "正在等待自动认证重试时间；本次未提交", "AuthenticationCooldown", source, "authentication_skipped"); return; }
         if (credential is null || credential.Username != settings.Username || credential.Carrier != settings.Carrier ||
             credential.PortalUrl != settings.PortalUrl)
-        { SetState(ConnectionState.NeedsConfiguration, "请先配置账号和密码", "MissingCredentials"); return; }
+        { SetState(ConnectionState.NeedsConfiguration, "请先配置账号和密码", "MissingCredentials", source, "authentication_skipped"); return; }
         if (DateTimeOffset.UtcNow < nextAuthentication)
-        { failures++; SetState(ConnectionState.LimitedConnectivity, "正在等待重试间隔，请稍后再试", "AuthenticationCooldown"); return; }
+        { failures++; SetState(ConnectionState.LimitedConnectivity, "正在等待重试间隔，请稍后再试", "AuthenticationCooldown", source, "authentication_skipped"); return; }
         token.ThrowIfCancellationRequested();
         nextAuthentication = DateTimeOffset.UtcNow.AddSeconds(5);
-        SetState(ConnectionState.Authenticating, "正在进行一次校园账号认证");
-        var login = await network.LoginAsync(credential.Username, credential.Password, settings.Carrier, settings.PortalUrl, token);
+        SetState(ConnectionState.Authenticating, "正在核对门户与有线路径，准备必要的认证");
+        bool submitted = false;
+        var login = await network.LoginAsync(credential.Username, credential.Password, settings.Carrier, settings.PortalUrl, token,
+            time => { submitted = true; RecordSubmission(time, source); });
         token.ThrowIfCancellationRequested();
+        if (submitted) RecordLoginResult(login, source);
+        else RecordEvent(login.Message, "authentication_skipped", login.ReasonCode, source);
         if (login.CredentialsRejected)
         {
-            settings = settings with { AuthenticationBlocked = true, BlockedReason = login.Message };
+            settings = settings with
+            {
+                AuthenticationBlocked = true, BlockedReason = login.Message,
+                BlockedReasonCode = login.ReasonCode, AuthenticationRetryAt = null
+            };
             store.SaveSettings(settings);
             failures++;
             SetState(ConnectionState.AuthenticationRejected, login.Message, "AuthenticationRejected");
@@ -275,31 +314,47 @@ internal sealed class ConnectionWorker : BackgroundService
         if (!login.Accepted)
         {
             failures++;
-            nextAuthentication = DateTimeOffset.UtcNow.Add(RetryPolicy.GetDelay(failures, retryAfter: login.RetryAfter));
+            bool keepConfirmedBlock = settings.AuthenticationBlocked && !AuthenticationRetryPolicy.AllowsLegacyRetry(settings);
+            bool legacyRevalidation = AuthenticationRetryPolicy.AllowsLegacyRetry(settings);
+            TimeSpan delay = RetryPolicy.GetDelay(failures, retryAfter: legacyRevalidation
+                ? AuthenticationRetryPolicy.UnconfirmedRetryDelay : login.RetryAfter);
+            if (!keepConfirmedBlock) settings = settings with
+            {
+                AuthenticationBlocked = false,
+                BlockedReasonCode = login.ReasonCode == "unconfirmed_rejection" ? login.ReasonCode : "",
+                BlockedReason = login.ReasonCode == "unconfirmed_rejection" ? login.Message : "",
+                AuthenticationRetryAt = DateTimeOffset.UtcNow.Add(delay)
+            };
+            store.SaveSettings(settings);
             SetState(ConnectionState.PortalUnavailable, login.Message, "AuthenticationFailed"); return;
         }
-        nextAuthentication = DateTimeOffset.UtcNow.AddMinutes(5);
+        settings = settings with { AuthenticationRetryAt = DateTimeOffset.UtcNow.Add(RetryPolicy.AcceptedLoginGuard) };
+        store.SaveSettings(settings);
         foreach (int seconds in new[] { 2, 3, 10 })
         {
             await Task.Delay(TimeSpan.FromSeconds(seconds), token);
             var verified = await network.CheckAsync(settings.Carrier, settings.PortalUrl, token);
             token.ThrowIfCancellationRequested();
-            if (verified.InternetAvailable) { MarkOnline(); return; }
+            if (verified.InternetAvailable) { MarkOnline(source); return; }
             if (verified.IntranetAvailable) { MarkIntranetOnline(); return; }
         }
         failures++;
         SetState(ConnectionState.LimitedConnectivity, "校园认证已接受，互联网尚未验证可用；等待复查", "AwaitingInternetVerification");
     }
 
-    private void MarkOnline()
+    private void MarkOnline(string source = "Unknown")
     {
         lastSuccess = DateTimeOffset.UtcNow; failures = 0;
-        if (settings.AuthenticationBlocked)
+        if ((diagnostics.FirstRejectionAt.HasValue || !string.IsNullOrEmpty(diagnostics.FirstRejectionReasonCode)) &&
+            !diagnostics.RejectionResolvedAt.HasValue)
+            diagnostics = diagnostics with { RejectionResolvedAt = lastSuccess };
+        if (settings.AuthenticationBlocked || settings.AuthenticationRetryAt.HasValue || settings.BlockedReasonCode.Length > 0)
         {
-            settings = settings with { AuthenticationBlocked = false, BlockedReason = "" };
+            settings = settings with
+            { AuthenticationBlocked = false, BlockedReason = "", BlockedReasonCode = "", AuthenticationRetryAt = null };
             store.SaveSettings(settings);
         }
-        SetState(ConnectionState.Online, "校园有线网络已通过两个公网探测");
+        SetState(ConnectionState.Online, "校园有线网络已通过两个公网探测", "", source, "network_result");
         PersistHistory();
     }
 
@@ -309,15 +364,59 @@ internal sealed class ConnectionWorker : BackgroundService
         SetState(ConnectionState.IntranetOnline, "校内网门户报告已在线；所选服务不提供外网");
     }
 
-    private void SetState(ConnectionState state, string message, string error = "")
+    private void RecordSubmission(DateTimeOffset time, string source)
     {
         lock (sync)
         {
-            if (snapshot.State != state || snapshot.Message != message)
+            nextAuthentication = time.Add(RetryPolicy.MinimumAuthenticationInterval);
+            diagnostics = diagnostics with
             {
-                events.Add(new(DateTimeOffset.UtcNow, message));
-                events.RemoveAll(x => x.Time < DateTimeOffset.UtcNow.AddDays(-7));
-                while (events.Count > 80) events.RemoveAt(0);
+                LastSubmissionAt = time, LastSubmissionSource = source,
+                LastSubmissionResultCode = "pending", LastResultAt = null
+            };
+            RecordEvent("已发起一次校园账号认证提交", "authentication_submitted", "authentication_submitted", source);
+        }
+    }
+
+    private void RecordLoginResult(LoginResult login, string source)
+    {
+        lock (sync)
+        {
+            var time = DateTimeOffset.UtcNow;
+            diagnostics = diagnostics with { LastSubmissionResultCode = login.ReasonCode, LastResultAt = time };
+            if (login.CredentialsRejected || login.ReasonCode == "unconfirmed_rejection")
+            {
+                if (string.IsNullOrEmpty(diagnostics.FirstRejectionReasonCode) || diagnostics.RejectionResolvedAt.HasValue)
+                    diagnostics = diagnostics with
+                    {
+                        FirstRejectionAt = time, FirstRejectionReasonCode = login.ReasonCode,
+                        FirstRejectionSource = source, RejectionResolvedAt = null
+                    };
+            }
+            RecordEvent(login.Message, "authentication_result", login.ReasonCode, source);
+        }
+    }
+
+    private void RecordEvent(string message, string kind, string code, string source)
+    {
+        lock (sync)
+        {
+            events.Add(new(DateTimeOffset.UtcNow, message) { Kind = kind, ReasonCode = code, Source = source });
+            events.RemoveAll(x => x.Time < DateTimeOffset.UtcNow.AddDays(-7));
+            while (events.Count > 80) events.RemoveAt(0);
+            RefreshSnapshot(); PersistHistory();
+        }
+    }
+
+    private void SetState(ConnectionState state, string message, string error = "", string source = "Unknown", string kind = "state")
+    {
+        lock (sync)
+        {
+            var record = (state, message, error, source, kind);
+            if (state is not (ConnectionState.Checking or ConnectionState.Authenticating) && lastRecordedState != record)
+            {
+                lastRecordedState = record;
+                RecordEvent(message, kind, error, source);
             }
             snapshot = snapshot with { State = state, Message = message, ErrorCode = error };
             RefreshSnapshot(); PersistHistory();
@@ -329,11 +428,11 @@ internal sealed class ConnectionWorker : BackgroundService
         {
             Settings = settings, HasPassword = credential is not null, LastCheck = lastCheck, LastSuccess = lastSuccess,
             NextCheck = nextCheck, KeepingAwake = keepingAwake, ActualStartWithWindows = actualStartup,
-            RecentEvents = events.AsEnumerable().Reverse().ToArray()
+            RecentEvents = events.AsEnumerable().Reverse().ToArray(), Diagnostics = diagnostics
         };
     }
     private void PersistHistory()
     {
-        lock (sync) { try { store.SaveHistory(lastSuccess, events); } catch { /* Status remains available in memory if disk is full. */ } }
+        lock (sync) { try { store.SaveHistory(lastSuccess, events, diagnostics); } catch { /* Status remains available in memory if disk is full. */ } }
     }
 }

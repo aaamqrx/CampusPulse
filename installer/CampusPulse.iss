@@ -1,5 +1,11 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0-preview.1"
+  #define AppVersion "0.1.0-preview.2"
+#endif
+#ifndef PublishRoot
+  #define PublishRoot "..\artifacts\" + AppVersion + "\publish"
+#endif
+#ifndef InstallerOutputRoot
+  #define InstallerOutputRoot "..\artifacts\" + AppVersion + "\installer"
 #endif
 #define AppName "CampusPulse"
 
@@ -11,13 +17,14 @@ AppPublisher=CampusPulse contributors
 DefaultDirName={autopf}\CampusPulse
 DefaultGroupName=CampusPulse
 DisableProgramGroupPage=yes
+DisableDirPage=no
 UsePreviousAppDir=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.22000
 LicenseFile=..\LICENSE
-OutputDir=..\artifacts\installer
+OutputDir={#InstallerOutputRoot}
 OutputBaseFilename=CampusPulse-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -28,8 +35,8 @@ UninstallDisplayIcon={app}\App\CampusPulse.App.exe
 SetupLogging=yes
 
 [Files]
-Source: "..\artifacts\publish\App\*"; DestDir: "{app}\App"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\artifacts\publish\Service\*"; DestDir: "{app}\Service"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishRoot}\App\*"; DestDir: "{app}\App"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishRoot}\Service\*"; DestDir: "{app}\Service"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -197,6 +204,7 @@ var
   BinaryArgument: string;
 begin
   if CurStep <> ssPostInstall then Exit;
+  RunRequired(ExpandConstant('{app}\Service\CampusPulse.Service.exe'), '--protect-install-directory', 'Protect CampusPulse program files');
   RunRequired(ExpandConstant('{app}\Service\CampusPulse.Service.exe'), '--initialize-store', 'Initialize protected CampusPulse storage');
   BinaryArgument := 'binPath= "\"' + ExpandConstant('{app}\Service\CampusPulse.Service.exe') + '\""';
   if ExistingService then

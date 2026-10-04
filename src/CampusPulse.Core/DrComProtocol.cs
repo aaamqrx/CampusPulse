@@ -182,7 +182,7 @@ public static class DrComProtocol
         // ret_code values are documented by this portal's own a43.js. Unknown message text is never logged.
         return code switch
         {
-            "1" => new(false, true, "校园认证拒绝账号或密码，请检查后主动重试") { ReasonCode = "credentials_rejected" },
+            "1" => ClassifyGenericRejection(Value(root, "msg")),
             "2" => new(true, false, "门户报告终端已在线，仍需验证互联网") { ReasonCode = "already_online" },
             "3" or "11" => new(false, false, "认证服务繁忙，请稍后重试") { ReasonCode = "portal_busy", RetryAfter = TimeSpan.FromMinutes(1) },
             "5" or "6" or "8" or "9" or "10" => new(false, false, "认证服务暂时故障，请稍后重试") { ReasonCode = "portal_temporary_failure" },
@@ -190,6 +190,16 @@ public static class DrComProtocol
             "7" or "4" => ClassifyExactAccountMessage(Value(root, "msg")),
             "998" => new(false, false, "门户协议参数不受支持，请检查适配版本") { ReasonCode = "unsupported_configuration" },
             _ => Unknown()
+        };
+    }
+
+    private static LoginResult ClassifyGenericRejection(string message)
+    {
+        var exact = ClassifyExactAccountMessage(message);
+        if (exact.CredentialsRejected) return exact;
+        return new(false, false, "校园认证暂被拒绝，原因未确认；五分钟后自动重试")
+        {
+            ReasonCode = "unconfirmed_rejection", RetryAfter = AuthenticationRetryPolicy.UnconfirmedRetryDelay
         };
     }
 

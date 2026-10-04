@@ -65,7 +65,7 @@ public sealed class CampusNetworkClient : IDisposable
     }
 
     public async Task<LoginResult> LoginAsync(string username, string password, string carrier, string portalUrl,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action<DateTimeOffset>? onSubmitting = null)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (!PortalEndpoint.TryCreate(portalUrl, out var endpoint))
@@ -97,7 +97,7 @@ public sealed class CampusNetworkClient : IDisposable
                 return new(false, false, "网络路径已变化，请重新检查") { ReasonCode = "network_path_changed" };
             cancellationToken.ThrowIfCancellationRequested();
             Uri login = DrComProtocol.LoginUri(normalized, password, portal.Terminal, version, carrier, endpoint);
-            string body = await GetBodyAsync(client, login, endpoint, deadline.Token);
+            string body = await GetBodyAsync(client, login, endpoint, deadline.Token, onSubmitting: onSubmitting);
             return DrComProtocol.ClassifyLoginResponse(body);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -150,10 +150,14 @@ public sealed class CampusNetworkClient : IDisposable
     }
 
     private static async Task<string> GetBodyAsync(HttpClient client, Uri target, PortalEndpoint endpoint,
-        CancellationToken token, int maximumBytes = DrComProtocol.MaximumBodyBytes)
+        CancellationToken token, int maximumBytes = DrComProtocol.MaximumBodyBytes,
+        Action<DateTimeOffset>? onSubmitting = null)
     {
         if (!IsAllowedTarget(target, endpoint)) throw new FormatException("target_not_allowed");
         using var request = new HttpRequestMessage(HttpMethod.Get, target) { Version = HttpVersion.Version11, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+        token.ThrowIfCancellationRequested();
+        // This marks client dispatch, not server receipt. Never expose the credential-bearing URI.
+        onSubmitting?.Invoke(DateTimeOffset.UtcNow);
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         if ((int)response.StatusCode is 429 or 503)
         {
