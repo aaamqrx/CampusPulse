@@ -331,6 +331,24 @@
 - **源文件与安装载荷：通过有限范围**。27 个实际变更/新增文件显式清单核对，忽略目录/本机数据/日志排除、已知 GitHub token/私钥模式及差异检查通过；不是全面秘密审计。发布目录检查拒绝设置、凭据、事件、私钥及日志文件，清单记录全部 App/Service 文件摘要。证据 `.local/preview3/source-review.json`。旧 preview.2 本地安装包哈希仍与原记录一致。
 - **旧版远端基线：已回读**。旧两版 Release 和四附件的 id/大小/digest 记录于 `.local/preview3/old-releases-before.json`；远端旧 annotated tags 保持 preview.1 `e313b50d1477f9af611c14296c2b92db69ab22c4`、preview.2 `7fe05b883a652813f5e464733f6303652d5dcd4a`。首次只读旧版筛选因 Windows PowerShell 数组展开得到空列表，修正后回读成功，未修改任何 Release。
 
+## 2026-10-10 preview.3 普通 CI、标签 Actions 与草稿附件
+
+- **源码/普通 CI：通过**。27 个检查过的源码、图标和文档文件提交为 `0a476eba1f3fac95fa928aefd94a8af6cbd4cdda` 并推送 main，工作区干净。普通 [Actions 38028418549](https://github.com/aaamqrx/CampusPulse/actions/runs/38028418549) 的 Windows 构建、静态检查和四项目/55 项检查全部 success，实际日志另行回读 55/55。证据 `.local/preview3/run-38028418549.json`、同名 `.log`。
+- **推送过程失败及恢复**：新标签首次推送因 schannel TLS 握手失败；重试调用随后因自动审批额度耗尽而无法完成审查，操作未执行，并非安全性判定。用户继续后推送同一本地标签成功，没有强制移动标签或绕过审批。新 annotated tag 为 `5e8f37228f724c1254d435ff092ce38e9c15fdf5`，peeled commit 等于上述源码；旧两个 tag ref 不变。
+- **标签构建及草稿：通过**。23:07–23:11 [Actions 38062333177](https://github.com/aaamqrx/CampusPulse/actions/runs/38062333177)，build/draft 两 job success。固定 SDK `10.0.203`，官方 Inno Setup `6.7.3` 签名/发布者验证通过；四项目、55/55、自包含发布和打包通过。工作区 sourceDirty=false、sourceTags/版本/commit 一致，清单含 697 个载荷文件。Release `409022538` 为 draft/prerelease，三个附件安装包、sha256.txt、build-manifest.json 已回读；证据 `.local/preview3/run-38062333177.json/.log`、`release-draft-before.json`。
+- **最终包来源与校验：通过**。安装包 79,317,254 字节，SHA-256 `0d17c33d3374407cc5f631eb3f23ff616d2828895f2a31aaa4e8f0674f754142`；来自该次 Actions 的 artifact `11673447661`。连接器取得原始 ZIP，ZIP SHA-256 `6958a41c6dc240a06f728e883baae14cc6450d660d9629b855b79d11cca7e4f8` 与 GitHub API 一致；解包路径、源码/版本/标签、校验文本、三个草稿附件的 digest/大小全部一致。证据 `.local/preview3/ci-download-verification.json` 与 `ci/0.1.0-preview.3/`。
+- **本机下载工具失败边界**：原生 API 请求出现 EOF，其后大型文件流停滞；限定只结束本轮创建的下载进程，保留失败/部分文件。辅助 HttpClient 曾在发出请求后修改 Timeout 而失败，修正后旧框架流仍未响应取消；分段尝试未完成。连接器原始 ZIP 下载经续传并沿用已有 Windows 本机代理完成，未修改代理或网络配置。备用 gh 下载在得到确切 ZIP 后结束，不记为成功。上述均在安装前，未将不完整文件用于升级。
+
+## 2026-10-10 preview.3 原位升级、验收工具失败及复验
+
+- **首次升级检查失败**：23:27:29–23:28:37，固定 AppId 核对 E 盘原 preview.2 和精确 LocalSystem 服务后，在 `C:\ProgramData\CampusPulse-Preview3Backup-20261010` 建立仅 SYSTEM/管理员可访问的完整备份。安装确切 CI 文件后，工具把 events.json 从私有数据目录安全继承的权限误判失败；自动执行原 preview.2 安装包及受保护文件恢复，原版注册恢复。回滚末尾同一误判导致报告 RollbackFailure，不把这次记录写成成功。证据 `.local/preview3/upgrade-upgrade-first-failed.json`、`upgrade-sequence-first-failed.json`、首次升级和回滚日志。
+- **工具修正及旧版独立核对**：要求数据根目录继承关闭，逐文件只允许 SYSTEM/管理员且两者有完整权限，接受来自该私有根的安全继承。追加显式 `-ReuseVerifiedBackup`，先验证固定标记、所有备份哈希、旧程序完整、原密文及配置/服务状态，再复用备份重试，禁止覆盖备份。此修正仅在验收工具，未改变认证、通信或凭据格式，也未移动标签/重建附件。
+- **升级：通过**。23:29:52–23:30:09，2186/2186 核对，Failure=null、ProfileRestored=true、OriginalProfileVerifiedBeforeRetry=true。精确同一 CI 安装包原位覆盖 E 产品，全部 697 载荷的长度/SHA 与清单一致；原凭据密文、七项用户配置及三个实际开关保留，原后台运行状态/自启类型与权限恢复。证据 `.local/preview3/upgrade-upgrade.json`、`upgrade-preview3.log`。
+- **最终包/正式窗口：通过**。23:30:09–23:30:17，1471/1471 核对，Failure=null、ProfileRestored=true。再次独立核对备份、载荷、权限及实际开关，启动本轮自己的正式安装 WPF，版本、密码遮蔽、三个开关、更新控件和响应通过；快捷方式指向 E App，EXE/安装器图标提取通过。只结束本轮创建的界面。证据 `.local/preview3/upgrade-finalpackage.json`、`installer-icon.png`；当时后台 WaitingNetwork，不将它写成新的公网恢复证明。
+- **原生更新/浏览器入口：通过其边界**。辅助检查宿主先因缺少 IO 引用/无用引用失败，修正后因 WPF ResourceAssembly 已设定而启动失败；改为宿主携带相同图标资源后，23:33:13–23:33:29 执行成功、退出码 0。加载 UI DLL 的 SHA 与正式安装文件一致；启动检查得到可理解结果，手动按钮显示重试间隔，托盘/窗口资源加载，真实“查看更新”事件交给浏览器。新版结果使用模拟注入、目标为已公开 preview.2 页面，不声称真实发现另一个新版或验证所有浏览器。未发校园检测/认证/设置命令。证据 `.local/preview3/browser-entry.json`、`native-tray-icon.png` 及失败构建/启动记录；原生图标人工回看通过。
+- **公开操作：已回读**。完成上述验收后公开同一草稿，Release id 保持 `409022538`、draft=false/prerelease=true、附件 digest/大小保持不变；[实际发布页面](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.3) 与 API 回读成功。旧两版 Release/四附件 id、大小和 digest 独立复查不变，证据 `.local/preview3/release-readback.json`、`old-releases-after.json`。公开实际下载及受保护临时备份清理结果继续追加。
+- **边界**：只执行本机原位升级与本轮界面/构建验收；没有主动认证、关闭网络、重启或更改电源计划。既有认证、一晚跨夜、完整安装生命周期继续引用原记录；其他机器/运营商/干净 Windows、额外重启和多夜未执行。安装包未签名。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

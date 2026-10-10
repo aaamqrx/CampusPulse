@@ -1,0 +1,65 @@
+name: Verify public preview delivery
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published preview version without v
+        required: true
+      expected_commit:
+        description: Accepted tag source commit
+        required: true
+      expected_sha256:
+        description: Accepted installer SHA-256
+        required: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download anonymous public files and compare accepted delivery
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+-preview\.\d+$' -or $env:EXPECTED_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:EXPECTED_SHA256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid accepted delivery inputs.' }
+          $tag = 'v' + $env:VERSION
+          $source = git rev-parse "$tag^{}"
+          if ($LASTEXITCODE -ne 0 -or $source -ne $env:EXPECTED_COMMIT) { throw 'Published tag changed.' }
+          # No Authorization header: this must work as an ordinary public download.
+          $release = Invoke-RestMethod "https://api.github.com/repos/aaamqrx/CampusPulse/releases/tags/$tag" -Headers @{'User-Agent'='CampusPulse-Public-Verification'}
+          if ($release.draft -or -not $release.prerelease -or $release.assets.Count -ne 3) { throw 'Expected public preview and three assets.' }
+          $root = "public/$env:VERSION"
+          New-Item -ItemType Directory -Path "$root/installer" -Force | Out-Null
+          $files = @()
+          foreach ($asset in $release.assets) {
+            if ($asset.name -notin @("CampusPulse-Setup-$($env:VERSION).exe", 'sha256.txt', 'build-manifest.json')) { throw 'Unexpected attachment.' }
+            $uri = [Uri]$asset.browser_download_url
+            if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'github.com' -or -not $uri.AbsolutePath.StartsWith("/aaamqrx/CampusPulse/releases/download/$tag/")) { throw 'Unexpected public download URL.' }
+            $path = if ($asset.name -eq 'build-manifest.json') { "$root/$($asset.name)" } else { "$root/installer/$($asset.name)" }
+            Invoke-WebRequest $uri -OutFile $path -TimeoutSec 120
+            $sha = (Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()
+            if ("sha256:$sha" -ne $asset.digest -or (Get-Item -LiteralPath $path).Length -ne $asset.size) { throw 'Public file size or SHA-256 mismatch.' }
+            $files += @{name=$asset.name;size=$asset.size;sha256=$sha}
+          }
+          ./scripts/verify-release.ps1 -Version $env:VERSION -Root $root -ExpectedCommit $env:EXPECTED_COMMIT
+          $manifest = Get-Content "$root/build-manifest.json" -Raw | ConvertFrom-Json
+          if ($manifest.sha256 -ne $env:EXPECTED_SHA256) { throw 'Public installer differs from accepted installer.' }
+          @{time=[DateTimeOffset]::UtcNow.ToString('o');releaseId=$release.id;tag=$tag;sourceCommit=$source;publicAnonymousDownloads=$true;installerSha256=$manifest.sha256;files=$files;failure=$null} | ConvertTo-Json -Depth 6 | Set-Content public-verification.json -Encoding utf8
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-verification-evidence
+          path: public-verification.json
+          if-no-files-found: error
+          retention-days: 30

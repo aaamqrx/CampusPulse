@@ -1,7 +1,7 @@
 name: Build and offline checks
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 permissions:

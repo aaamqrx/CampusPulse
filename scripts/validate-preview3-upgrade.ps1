@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateSet('Upgrade','FinalPackage','Restore','Cleanup')][string]$Phase='Upgrade',
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$ExpectedCommit,
-    [switch]$Execute,[switch]$Elevate)
+    [switch]$Execute,[switch]$Elevate,[switch]$ReuseVerifiedBackup)
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $version='0.1.0-preview.3'
@@ -18,7 +18,9 @@ if(-not$Execute){Write-Output 'Plan only: verify exact CI delivery, registered p
 $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
  if(-not$Elevate){throw 'Administrator required; use -Elevate for local UAC.'}
- $child=Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Phase',$Phase,'-ExpectedCommit',$ExpectedCommit,'-Execute')
+ $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Phase',$Phase,'-ExpectedCommit',$ExpectedCommit,'-Execute')
+ if($ReuseVerifiedBackup){$arguments+='-ReuseVerifiedBackup'}
+ $child=Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList $arguments
  if(-not$child.WaitForExit(45000)){Write-Output 'Validation pending. Read the timestamped result after completion; do not run concurrent installation or restoration.';exit 2}
  if(Test-Path -LiteralPath $resultPath){$r=Get-Content -LiteralPath $resultPath -Raw|ConvertFrom-Json;[ordered]@{Phase=$r.Phase;Checks=$r.Checks.Count;Passed=@($r.Checks|Where-Object Passed).Count;Failure=$r.Failure;ProfileRestored=$r.ProfileRestored;Finished=$r.Finished}|ConvertTo-Json}
  exit $child.ExitCode
@@ -94,10 +96,13 @@ function Assert-Payload{
 function Assert-Profile{
  $original=Get-Content -LiteralPath (Join-Path $backup 'Data\settings.json') -Raw|ConvertFrom-Json
  Check ((Hash (Join-Path $data 'credentials.dat'))-eq$state.CredentialHash) 'Original encrypted credential bytes retained'
+ $dataAcl=Get-Acl -LiteralPath $data
+ Check $dataAcl.AreAccessRulesProtected 'Data root inheritance disabled'
  foreach($name in @('settings.json','credentials.dat','events.json')){
   $acl=Get-Acl -LiteralPath (Join-Path $data $name)
   $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
-  Check ($acl.AreAccessRulesProtected-and@($rules|Where-Object{$_.IdentityReference.Value-notin@('S-1-5-18','S-1-5-32-544')}).Count-eq0) ('Data stays private: '+$name)
+  Check (@($rules|Where-Object{$_.IdentityReference.Value-notin@('S-1-5-18','S-1-5-32-544')}).Count-eq0) ('Data stays private: '+$name)
+  foreach($id in @('S-1-5-18','S-1-5-32-544')){Check (@($rules|Where-Object{$_.IdentityReference.Value-eq$id-and$_.AccessControlType-eq'Allow'-and($_.FileSystemRights-band[Security.AccessControl.FileSystemRights]::FullControl)-eq[Security.AccessControl.FileSystemRights]::FullControl}).Count-gt0) 'Private data retains SYSTEM and administrator access'}
  }
  $current=Get-Content -LiteralPath (Join-Path $data 'settings.json') -Raw|ConvertFrom-Json
  foreach($key in @('Enabled','StartWithWindows','UnattendedMode','Username','Carrier','PortalUrl','OnlineCheckSeconds')){Check ($current.$key-eq$original.$key) ('Original setting retained: '+$key)}
@@ -165,6 +170,11 @@ try{
   Check ($reg.DisplayVersion-eq'0.1.0-preview.2') 'Expected existing preview.2 registration'
   Check (@(Get-Process -Name CampusPulse.App -ErrorAction SilentlyContinue).Count-eq0) 'No user settings process needs force-closing'
   Check ((Hash $oldPackage)-eq$oldPackageHash) 'Published rollback installer prepared'
+  if($ReuseVerifiedBackup){
+   Read-Backup;Assert-Profile
+   foreach($file in $state.Files){if($file.Path.StartsWith('Programs/')){Check ((Hash (Safe (Join-Path $root $file.Path.Substring(9)) $root))-eq$file.Sha256) 'Restored original program matches private backup'}}
+   $report.OriginalProfileVerifiedBeforeRetry=$true
+  }else{
   Secure-Backup
   $originalService=Service
   $inventory=@()
@@ -173,6 +183,7 @@ try{
   $state=[ordered]@{Root=$root;ExpectedCommit=$ExpectedCommit;WasRunning=($originalService.State-eq'Running');CredentialHash=Hash (Join-Path $backup 'Data\credentials.dat');Files=$inventory}
   $state|ConvertTo-Json -Depth 6|Set-Content -LiteralPath (Join-Path $backup 'complete.json') -Encoding UTF8
   Read-Backup
+  }
   $mutated=$true;Stop-Owned
   $paused=Get-Content -LiteralPath (Join-Path $backup 'Data\settings.json') -Raw|ConvertFrom-Json;$paused.Enabled=$false
   $paused|ConvertTo-Json -Depth 6|Set-Content -LiteralPath (Join-Path $data 'settings.json') -Encoding UTF8
