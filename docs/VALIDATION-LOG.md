@@ -359,6 +359,12 @@
 - **最终文档同步及静态检查：通过**。README 改为实际已公开的 preview.3 下载页、三附件和 SHA，交接/开发/验收/Release 说明同步本轮结果。`scripts/check-static.ps1`、`git diff --check` 与六份实际变更的有限秘密模式/忽略目录检查均退出码 0；不是全面秘密审计。23:57 已同步同一公开 Release 的说明，未替换附件。旧失败保留，新样本不代替旧校园认证和跨夜证据；最终文档提交的 main/Release 回读另存本机证据，不移动软件标签。
 - **未执行边界**：本轮没有新增真实校园认证、跨夜、卸载/重启或改变电源计划；其他机器、运营商、干净 Windows、多夜稳定性仍未验证，安装包未签名。
 
+## 2026-10-11 preview.3 重新授权管理员确认与备份清理
+
+- **授权及操作**：用户明确“再弹管理员确认”，重新执行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-preview3-upgrade.ps1 -Phase Cleanup -ExpectedCommit 0a476eba1f3fac95fa928aefd94a8af6cbd4cdda -Execute -Elevate`，本次 Windows 管理员确认通过。原取消记录不覆盖。
+- **独立复核与清理：通过**。00:02:24–00:02:30，父进程退出码 0，738/738 检查、Failure=null、ProfileRestored=true。核对已通过的最终包报告、固定产品注册/精确 LocalSystem 服务、原密文与配置、三个实际开关、启动状态及插电防睡眠；核对专用备份标记、全部文件摘要、私有 ACL 和无链接的精确路径后，仅删除 `C:\ProgramData\CampusPulse-Preview3Backup-20261010`。正式 `E:\Apps\CampusPulse` 程序和 ProgramData 数据保留。证据 `.local/preview3/upgrade-cleanup.json`。
+- **边界**：本次只复核并清理本轮专用备份，没有安装/卸载、重启、主动校园认证、改网络或电源计划，未改变公开软件标签或附件。同步交接当前状态，保留此前全部失败证据。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

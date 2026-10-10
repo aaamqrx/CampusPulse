@@ -1,6 +1,6 @@
 # CampusPulse 接手指南与项目进度
 
-最后更新：2026-10-10。先读本页，再按问题查相关文档；历史操作和失败证据统一保留在 [VALIDATION-LOG](VALIDATION-LOG.md)。
+最后更新：2026-10-11。先读本页，再按问题查相关文档；历史操作和失败证据统一保留在 [VALIDATION-LOG](VALIDATION-LOG.md)。
 
 ## 当前阶段
 
@@ -56,4 +56,4 @@ preview.1 的早晨恢复失败已修复。旧失败、两次迁移工具失败�
 
 当前下一步：按实际需要补充其他机器/运营商、干净 Windows 与多夜稳定性样本；正常使用出现新故障时读取脱敏摘要定位。正式数据仍在受保护的 ProgramData，私有备份从未进入仓库。最终文档单独推送回读，软件标签和安装包保持上述源码与摘要。
 
-本轮专用备份 `C:\ProgramData\CampusPulse-Preview3Backup-20261010` 仍受 SYSTEM/管理员权限保护。最终清理的 UAC 被取消，未执行删除，不再自动重复弹窗；正式安装与已通过的升级/公开下载验收不受影响。用户后续明确要求清理时，使用 `scripts/validate-preview3-upgrade.ps1 -Phase Cleanup -ExpectedCommit 0a476eba1f3fac95fa928aefd94a8af6cbd4cdda -Execute -Elevate`，先核对原配置、备份标记和固定路径，再删除专用备份。
+本轮专用备份 `C:\ProgramData\CampusPulse-Preview3Backup-20261010` 已于 2026-10-11 00:02 清理。首次清理 UAC 取消后，用户明确要求重新弹窗，管理员确认通过；738/738 核对原密文、三个开关、后台/启动类型、防睡眠、备份标记/摘要/私有权限和无链接的固定路径，随后仅删除专用备份。正式程序和 ProgramData 数据保留，Failure=null、ProfileRestored=true；证据 `.local/preview3/upgrade-cleanup.json`。原取消记录继续保留。
