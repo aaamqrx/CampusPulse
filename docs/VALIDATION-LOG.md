@@ -349,6 +349,16 @@
 - **公开操作：已回读**。完成上述验收后公开同一草稿，Release id 保持 `409022538`、draft=false/prerelease=true、附件 digest/大小保持不变；[实际发布页面](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.3) 与 API 回读成功。旧两版 Release/四附件 id、大小和 digest 独立复查不变，证据 `.local/preview3/release-readback.json`、`old-releases-after.json`。公开实际下载及受保护临时备份清理结果继续追加。
 - **边界**：只执行本机原位升级与本轮界面/构建验收；没有主动认证、关闭网络、重启或更改电源计划。既有认证、一晚跨夜、完整安装生命周期继续引用原记录；其他机器/运营商/干净 Windows、额外重启和多夜未执行。安装包未签名。
 
+## 2026-10-10 preview.3 公开下载、最终文档与备份保留
+
+- **发布后工具 CI：通过**。main `f8ef9909864b4c179c301812852bf13e727a7dbf` 同步验收工具修正、普通 CI 全分支触发及公开下载检查工作流，[普通 Actions 38064897097](https://github.com/aaamqrx/CampusPulse/actions/runs/38064897097) success。软件标签仍指向 `0a476eba1f3fac95fa928aefd94a8af6cbd4cdda`，App/Service 和公开附件未重新构建。证据 `.local/preview3/tool-fix-ci.json`。
+- **独立 Windows 匿名下载：通过**。[Actions 38064930518](https://github.com/aaamqrx/CampusPulse/actions/runs/38064930518) success，23:46:08 回读实际报告：Release id `409022538`，三个公开附件不带认证下载，完整大小及 SHA-256 与源标签/清单/服务器附件 digest 一致。安装包 79,317,254 字节，SHA-256 `0d17c33d3374407cc5f631eb3f23ff616d2828895f2a31aaa4e8f0674f754142`；清单 SHA `558d960df6d13a84c8f580bb0df5be1376bf640998609a0d8fd935bc0fb55387`，校验文本 SHA `b51bd9490eea52384ece3fe9f6ae4f2b9207bf4458eb6664aa4a33b6ef785d57`。证据 `.local/preview3/public-runner/public-verification.json`，实际报告 artifact `11674266861`，下载 ZIP SHA `2e5d19a6c7172781fbd16c92d381055a2a563b69a73194cd8da936e536bf4730`；这是下载校验，不是另一次安装。
+- **本机公开匿名下载：通过**。23:51:29 完成三份公开附件，完整大小/摘要逐一与本机已验收的 Actions 文件一致，Failure=null、AcceptedCiFilesMatch=true。Windows Schannel 下载先发生两次 300 秒超时及一次 TLS 失败，保留部分文件；最终使用 Python/OpenSSL 的证书验证及 TLS 1.2、已有本机代理续传完成，没有改变系统网络、代理或 TLS 设置。证据 `.local/preview3/public-verification.json`、`public-download/`；没有将部分下载记为通过。
+- **最终本地产物整理**：将脏工作区候选完整保留于已忽略的 `.local/preview3/local-candidate/`；`artifacts/0.1.0-preview.3/` 改放已经验收的同一 CI 安装包、sha256.txt 与清单，并再次核对 SHA。旧版本标签/附件及原安装包保持不变。
+- **临时备份清理未执行**：调用 `scripts/validate-preview3-upgrade.ps1 -Phase Cleanup -ExpectedCommit 0a476eba1f3fac95fa928aefd94a8af6cbd4cdda -Execute -Elevate`，Windows 管理员确认取消，父进程退出码 1，管理员子进程未启动、没有清理通过报告。专用备份 `C:\ProgramData\CampusPulse-Preview3Backup-20261010` 保留既有 SYSTEM/管理员保护，不重复弹窗，不删除正式数据。升级、最终包和公开下载通过结论不受影响。
+- **最终文档同步及静态检查：通过**。README 改为实际已公开的 preview.3 下载页、三附件和 SHA，交接/开发/验收/Release 说明同步本轮结果。`scripts/check-static.ps1`、`git diff --check` 与六份实际变更的有限秘密模式/忽略目录检查均退出码 0；不是全面秘密审计。23:57 已同步同一公开 Release 的说明，未替换附件。旧失败保留，新样本不代替旧校园认证和跨夜证据；最终文档提交的 main/Release 回读另存本机证据，不移动软件标签。
+- **未执行边界**：本轮没有新增真实校园认证、跨夜、卸载/重启或改变电源计划；其他机器、运营商、干净 Windows、多夜稳定性仍未验证，安装包未签名。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

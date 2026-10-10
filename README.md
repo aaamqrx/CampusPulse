@@ -6,13 +6,13 @@
 
 ## 下载
 
-当前已发布版本：[v0.1.0-preview.2](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.2)。
+当前已发布版本：[v0.1.0-preview.3](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.3)。
 
-[下载安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/CampusPulse-Setup-0.1.0-preview.2.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/sha256.txt)
+[下载安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/CampusPulse-Setup-0.1.0-preview.3.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/sha256.txt) · [构建清单](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/build-manifest.json)
 
-安装包包含运行环境，需要管理员权限，目前未签名。preview.2 安装包 SHA-256：`4480aaffd22ff601d4a089e4b9a45ae6ac7cc7fae01b743ff77e3916cc224f28`。
+安装包包含运行环境，需要管理员权限，目前未签名。preview.3 安装包 SHA-256：`0d17c33d3374407cc5f631eb3f23ff616d2828895f2a31aaa4e8f0674f754142`。
 
-**preview.3 正在验收**：新增软件更新提醒、统一图标、GitHub 自动构建检查与标签草稿打包。源码已完成四项目本地构建及 55 项离线检查；新包升级与公开结果以[验证记录](docs/VALIDATION-LOG.md)为准。
+**preview.3 已发布**：新增软件更新提醒、统一图标、GitHub 自动构建检查与标签草稿打包。四项目构建、55 项离线检查、普通及标签 Actions、本机原位升级和公开三附件下载核对通过，详细结果见[验证记录](docs/VALIDATION-LOG.md)。
 
 ## 首次使用
 
@@ -44,7 +44,7 @@ preview.3 的“软件更新”在设置窗口打开时检查一次，也可手�
 
 - Windows 11 x64、有线网、与当前学校相同的 Dr.COM 页面和接口配置。支持运营商选择和校内 HTTP IPv4 门户首页输入。
 - 校园电信完成过真实手动认证及公网复查；修复后台完成过一晚自然自动恢复，用户已确认日常稳定运行。
-- preview.2 的本机安装生命周期、最终包复验和公开下载校验已有记录。preview.3 新增功能按本轮证据独立验收。
+- preview.2 的本机安装生命周期已有记录；preview.3 的原位升级、原生更新区域与图标、最终包及公开下载均按本轮证据独立验收。
 - 其他电脑、干净 Windows、其他运营商/学校协议、其他 DPI、卸载后重启及多夜稳定性未完成完整验证，继续作为预览版提供。
 
 详细结果和失败历史见[验证记录](docs/VALIDATION-LOG.md)。
