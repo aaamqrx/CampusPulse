@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -17,6 +19,11 @@ public partial class MainWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Forms.NotifyIcon? _tray;
+    private readonly HttpClient? _updateHttp;
+    private readonly System.Drawing.Icon? _trayIcon;
+    private UpdateCheckResult? _update;
+    private DateTimeOffset? _updateRetryAt;
+    private bool _checkingUpdate;
     private ServiceSnapshot? _snapshot;
     private BackgroundState _backgroundState;
     private bool _rendering = true;
@@ -38,16 +45,26 @@ public partial class MainWindow : Window
             Title += "（演示，未联网）";
             DemoBanner.Visibility = Visibility.Visible;
             RenderDemo();
+            UpdateStatusText.Text = "【演示】发现新版本 0.1.0-preview.10；未访问 GitHub。";
+            ViewUpdateButton.Visibility = Visibility.Visible;
         }
         else
         {
             var menu = new Forms.ContextMenuStrip();
+            _updateHttp = new HttpClient(new HttpClientHandler
+            {
+                AllowAutoRedirect = false, UseCookies = false, UseDefaultCredentials = false
+            }) { Timeout = Timeout.InfiniteTimeSpan };
+            using var iconStream = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/Resources/campuspulse.ico"))!.Stream;
+            using var resourceIcon = new System.Drawing.Icon(iconStream, 32, 32);
+            _trayIcon = (System.Drawing.Icon)resourceIcon.Clone();
             menu.Items.Add("打开 CampusPulse", null, (_, _) => Dispatcher.Invoke(ShowFromTray));
             menu.Items.Add("退出界面（后台继续）", null, (_, _) => Dispatcher.Invoke(ExitInterface));
             _tray = new Forms.NotifyIcon
             {
                 Text = "CampusPulse · 设置与状态",
-                Icon = System.Drawing.SystemIcons.Application,
+                Icon = _trayIcon,
                 ContextMenuStrip = menu,
                 Visible = true
             };
@@ -57,6 +74,7 @@ public partial class MainWindow : Window
             {
                 await RefreshAsync();
                 _pollTimer.Start();
+                await CheckForUpdatesAsync();
             };
         }
         Closed += (_, _) =>
@@ -64,6 +82,8 @@ public partial class MainWindow : Window
             _pollTimer.Stop();
             _lifetime.Cancel();
             _tray?.Dispose();
+            _trayIcon?.Dispose();
+            _updateHttp?.Dispose();
             PasswordInput.Clear();
             System.Windows.Application.Current.Shutdown();
         };
@@ -105,6 +125,55 @@ public partial class MainWindow : Window
             _polling = false;
             UpdateControls();
         }
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e) => await CheckForUpdatesAsync();
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (_isDemo) { UpdateStatusText.Text = "【演示】发现新版本 0.1.0-preview.10；未访问 GitHub。"; return; }
+        if (_checkingUpdate || _lifetime.IsCancellationRequested) return;
+        if (_updateRetryAt > DateTimeOffset.UtcNow)
+        {
+            UpdateStatusText.Text = $"请在 {_updateRetryAt.Value.ToLocalTime():HH:mm:ss} 后再次检查更新。" +
+                (_update?.State == UpdateCheckState.Available ? $" 上次发现新版本 {_update.Version}。" : "");
+            return;
+        }
+        _checkingUpdate = true;
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "正在检查 GitHub 发布版本…";
+        try
+        {
+            var result = await new ReleaseUpdateChecker(_updateHttp!).CheckAsync(ProductInfo.Version, _lifetime.Token);
+            _updateRetryAt = result.RetryAt ?? DateTimeOffset.UtcNow.AddMinutes(1);
+            if (result.State != UpdateCheckState.Unavailable) _update = result;
+            UpdateStatusText.Text = result.State switch
+            {
+                UpdateCheckState.Available => $"发现新版本 {result.Version}，当前版本 {ProductInfo.Version}。",
+                UpdateCheckState.UpToDate => $"当前版本 {ProductInfo.Version} 已是最新可用版本。",
+                _ => "暂时无法检查更新，可稍后重试。" +
+                     (_update?.State == UpdateCheckState.Available ? $" 上次发现新版本 {_update.Version}。" : "")
+            };
+            ViewUpdateButton.Visibility = _update?.State == UpdateCheckState.Available ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        finally
+        {
+            _checkingUpdate = false;
+            if (!_lifetime.IsCancellationRequested) CheckUpdateButton.IsEnabled = true;
+        }
+    }
+
+    private void ViewUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isDemo) { UpdateStatusText.Text = "【演示】正式模式会打开 GitHub 发布页面；此处不打开浏览器。"; return; }
+        if (_update?.ReleasePage is not { } page || _update.Version is null) return;
+        // Retain the original validated tag's URL, including tags without a leading v.
+        if (page.Scheme != "https" || page.Host != "github.com" || !string.IsNullOrEmpty(page.UserInfo) ||
+            !page.AbsolutePath.StartsWith("/aaamqrx/CampusPulse/releases/tag/", StringComparison.Ordinal) ||
+            page.Query.Length != 0 || page.Fragment.Length != 0) return;
+        try { Process.Start(new ProcessStartInfo(page.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Win32Exception) { UpdateStatusText.Text = "无法打开浏览器，请稍后重试。"; }
     }
 
     private void ApplySnapshot(ServiceSnapshot snapshot, bool replaceForm = false)

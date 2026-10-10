@@ -4,7 +4,7 @@
         Title="CampusPulse · 校园网自动连接" Width="1080" Height="850"
         MinWidth="900" MinHeight="680" Background="#F3F7F9"
         FontFamily="Microsoft YaHei UI" FontSize="14"
-        WindowStartupLocation="CenterScreen" Closing="Window_Closing">
+        Icon="Resources/campuspulse.ico" WindowStartupLocation="CenterScreen" Closing="Window_Closing">
     <DockPanel Margin="26,22,26,18">
         <Grid DockPanel.Dock="Top" Margin="0,0,0,18">
             <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -110,6 +110,17 @@
                         </StackPanel>
                     </Border>
                 </Grid>
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="软件更新" Style="{StaticResource SectionTitle}" />
+                        <TextBlock x:Name="UpdateStatusText" Text="尚未检查更新" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <WrapPanel>
+                            <Button x:Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdate_Click" />
+                            <Button x:Name="ViewUpdateButton" Content="查看更新" Click="ViewUpdate_Click" Visibility="Collapsed" />
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource Description}" Text="打开设置窗口时检查一次；安装更新需要你在发布页面主动下载。" />
+                    </StackPanel>
+                </Border>
                 <Border x:Name="FeedbackBorder" Visibility="Collapsed" CornerRadius="8" Padding="14,10" Background="#E4F0EE" Margin="0,16,0,0">
                     <TextBlock x:Name="FeedbackText" TextWrapping="Wrap" />
                 </Border>

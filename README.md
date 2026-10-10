@@ -1,60 +1,74 @@
+<p align="center"><img src="assets/icon/campuspulse.png" width="88" alt="CampusPulse 网络脉冲图标"></p>
+
 # CampusPulse
 
-面向 Windows 11 的校园网自动认证预览工具，提供安装包、后台自动重连、可选开机自启动及插电无人值守模式。
+校园有线网恢复供网后，自动认证并验证互联网是否恢复。面向 Windows 11 x64，设置窗口与后台服务分开运行。
 
-**当前状态（2026-10-04）：修复完成，[v0.1.0-preview.2](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.2) 已公开预发布并验证下载，正式界面与后台已安装在 `E:\Apps\CampusPulse`。** 四项目构建无警告/错误、43/43 离线检查通过；候选安装生命周期 2222/2222、干净标签最终包 750/750 核对通过。用户确认的一晚自然跨夜有 Automatic 认证及公网恢复摘要；原密码密文和三个开关均保留。最终包来源 `58bc8f0` 干净标签，Release 附件信息和实际下载 SHA-256 一致。独立系统复核后两份本轮受保护临时备份已删除；系统账号数据仍在受保护 ProgramData。干净 Windows、其他机器/运营商/DPI、卸载后重启和多夜稳定性未验证；旧版失败、两次迁移工具失败及恢复记录均保留。 详见 [验证记录](docs/VALIDATION-LOG.md)。
+## 下载
 
-[下载新版安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/CampusPulse-Setup-0.1.0-preview.2.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/sha256.txt)。Windows 11 x64，需要管理员权限，尚未签名；SHA-256 `4480aaffd22ff601d4a089e4b9a45ae6ac7cc7fae01b743ff77e3916cc224f28`。
+当前已发布版本：[v0.1.0-preview.2](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.2)。
 
-**发布历史（2026-10-01）：已发布 [0.1.0-preview.1 预发布版](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1)，公开页面和下载附件均已回读验证。** 最终包来自干净标签提交 `dd2dc1e`：四项目 Release 构建、30/30 离线检查通过；候选包完成 7 项安全拒绝检查、35 项本机安装生命周期断言，最终标签包另完成 15 项复验。干净 Windows 与历史旧代码迁移未验证，完整 M5 门槛未完成。09-29 单次真实手动认证与独立有线公网检查通过；一晚自然跨夜恢复按用户现场确认接受，缺少夜间事件时间线，不代表多夜稳定性。
+[下载安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/CampusPulse-Setup-0.1.0-preview.2.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.2/sha256.txt)
 
-[历史预览安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.1/CampusPulse-Setup-0.1.0-preview.1.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.1/sha256.txt)。Windows 11 x64 自包含安装包，需要管理员权限，尚未签名。SHA-256：`4bba4fa53113da88e110586f6fe192d97998b3fcb8bc405e2f17df3e2402a575`。首次安装默认自启开启、自动重连及无人值守关闭；每位使用者自行填写门户、运营商和凭据。
+安装包包含运行环境，需要管理员权限，目前未签名。preview.2 安装包 SHA-256：`4480aaffd22ff601d4a089e4b9a45ae6ac7cc7fae01b743ff77e3916cc224f28`。
 
-本轮逐项结果和剩余门槛见 [本机验收记录](docs/LOCAL-ACCEPTANCE.md)。21:06 新回滚修复版已部署到临时后台，运行文件哈希核对一致；一次异常结束后 Windows 约 5 秒恢复服务，防睡眠请求先释放再恢复，原开关及凭据密文保留。
+**preview.3 正在验收**：新增软件更新提醒、统一图标、GitHub 自动构建检查与标签草稿打包。源码已完成四项目本地构建及 55 项离线检查；新包升级与公开结果以[验证记录](docs/VALIDATION-LOG.md)为准。
 
-两次开机确认关闭自启后不启动、手动启动不改变自启，恢复后后台在用户解锁前运行；Windows 提前创建账户会话，不宣称早于所有会话。2026-10-01 已从临时服务迁移至正式安装目录，最终标签包复验后原三个开关均恢复开启，凭据密文不变、防睡眠有效。正式安装界面及断连提示已原生检查，受保护验收备份已清理。
+## 首次使用
 
-**接手项目请先读 [接手指南与项目进度](docs/HANDOFF.md)**，其中列出确定的需求、已有文件、未完成工作、下一步顺序和后续如何更新进度。状态更新时间：2026-10-04。
+1. 安装后打开 CampusPulse，可选择安装位置；账号数据保存在受保护的 ProgramData 目录。
+2. 填写学校门户首页、运营商、校园网账号和密码。当前默认门户为 `http://10.62.164.38/`。
+3. 点击“保存设置”。每位使用者自行输入密码，密码只在本机受保护保存。
+4. “立即检测”只检查网络；需要登录时可点击“立即重连”，按需尝试一次认证。
+5. 勾选“自动重连校园网”并保存；持续插电无人值守时，可另选“插电无人值守模式”。
 
-## 开发文档
+首次安装默认开启开机自启，自动重连和无人值守关闭。设置窗口需要管理员权限。
 
-- [早晨自动恢复修复计划](docs/RECOVERY-REPAIR-PLAN.md)：排查目标、六项推进顺序和逐项完成标准；先离线复现，再修复与复验。
-- [开发设计文档](docs/DEVELOPMENT.md)：已确认需求、三个独立开关、架构、实际门户证据、认证策略、安全与接口设计。
-- [Campus-Flow 功能参考](docs/REFERENCE-FEATURES.md)：10 类功能的采用方式、针对本场景的调整和证据边界。
-- [测试与发布计划](docs/TESTING-AND-RELEASE.md)：可执行验收用例、安装升级卸载、公开 GitHub 与预发布流程。
-- [验证记录](docs/VALIDATION-LOG.md)：实际执行的构建、模拟测试与失败边界，不将计划写成通过结果。
-- [早期范围记录](docs/implementation-plan.md)：保留此前需求确认，不作为已完成功能列表。
+## 三个独立开关
 
-## 第一版范围
+- **开机自动运行后台**：电脑重启后启动后台，不自动弹出设置窗口；关闭后改为手动启动。
+- **自动重连校园网**：持续低频检测，供网恢复后按需要认证；无需知道早晨恢复时间。
+- **插电无人值守模式**：插电且后台运行时防止空闲睡眠，允许息屏和锁屏；暂停重连不关闭此功能。
 
-- Windows 11 x64、有线网络；默认门户为 `http://10.62.164.38/`，可填写校内 HTTP IPv4 门户首页。当前只适配与该校相同的 Dr.COM 页面和接口配置，其他地址须通过页面核对后才会提交密码。
-- 运营商选择：中国联通、中国移动、中国电信、校内网（无外网）；后者只显示校内网状态，不当作公网恢复。
-- 目标为自动等待夜间断网后的恢复，不要求用户知道早上恢复时间；修复后台一晚跨夜验收获用户确认及脱敏记录，新安装包已复验并公开预发布，公开旧版失败历史保留。
-- 开机自动运行、自动重连、无人值守防睡眠三个独立开关。
-- 后台服务与设置窗口分离，窗口关闭后后台可继续工作。
-- 每位使用者自行填写账号密码；凭据仅在本机保存，不进入仓库和安装包。
-- 成功以公网连通性验证为准，不包含任何远程控制软件测试。
+## 使用注意
 
-其他学校的不同认证协议尚未适配；四个选项及自填地址目前只通过模拟测试，尚需在对应校园网络实测。
+关闭窗口会收起到托盘；“退出界面（后台继续）”只退出设置窗口。点击“停止后台服务”会同时结束自动重连和防睡眠。
 
-## 开发与发布
+软件将校园认证成功和公网恢复分开判断，部分连通不会触发连续重复登录。校内网选项只表示校内网络可用。
 
-采用 C#、.NET 10 LTS、WPF、Windows Service 和 Inno Setup。安装包包含运行环境；安装及首版设置窗口需要管理员权限。
+preview.3 的“软件更新”在设置窗口打开时检查一次，也可手动检查；预览版可提示后续预览或稳定版本。点击“查看更新”打开本仓库发布页面，安装仍由使用者主动完成。网络失败或 GitHub 限流时可稍后重试。
 
-`scripts/check-dev.ps1` 于 2026-09-30 对本轮源码完成四项目 Release 构建及 30 项进程内模拟测试。09-29 真实校园网单次手动认证与独立有线公网验证通过；09-30 用户报告一晚自动恢复成功。最近后台事件已回读，但夜间记录已被轮转，不能还原跨夜时间线。本轮重新生成 App/Service 自包含程序及安装包；10-01 本机生命周期 35 项断言通过。测试升级使用本轮应用载荷制作的 preview.0 安装器基线，验证安装器流程及设置保留，不证明历史旧代码迁移。
+当前门户使用 HTTP。本机加密保存不改变学校接口的传输方式；请只填写学校提供的门户。
 
-正在运行的是正式安装目录的 LocalSystem 服务，已恢复原开关和加密凭据。临时服务已按标记核对后移除。防睡眠、电源切换、S0 恢复、权限、界面/托盘及用户解锁前运行有本机证据；整夜防睡眠持续性、其他机器及卸载后重启未验证。
+## 支持范围与验证
 
-管理员可用 `scripts/dev-service-validation.ps1 -Action Install` 首次临时注册开发后台；已有受保护数据且确认自动重连已暂停时，可明确使用 `-Action Install -PreserveData` 复用数据。脚本会先检查目录、配置版本和已暂停状态，并按已保存的“开机自动运行”设置启动类型；拒绝覆盖已有同名服务或程序目录。之后用 `-Action Open` 打开**正式**界面；测试结束用 `-Action Remove` 移除测试服务，凭据存在时保留数据。当前已安装正式产品，不要对它执行临时服务移除脚本；该脚本会拒绝不同路径。正式只读状态使用 `scripts/inspect-local.ps1 -Target Installed -Elevate`，从固定产品注册信息核对实际安装目录，支持自选位置；证据在忽略的 `.local/installed-inspection/`。
+- Windows 11 x64、有线网、与当前学校相同的 Dr.COM 页面和接口配置。支持运营商选择和校内 HTTP IPv4 门户首页输入。
+- 校园电信完成过真实手动认证及公网复查；修复后台完成过一晚自然自动恢复，用户已确认日常稳定运行。
+- preview.2 的本机安装生命周期、最终包复验和公开下载校验已有记录。preview.3 新增功能按本轮证据独立验收。
+- 其他电脑、干净 Windows、其他运营商/学校协议、其他 DPI、卸载后重启及多夜稳定性未完成完整验证，继续作为预览版提供。
 
-**当前开发顺序：先修复并验证功能，最后重新打包。** 日常检查运行 `powershell -File scripts/check-dev.ps1`，只构建源码并运行模拟测试，不生成发布文件或安装包，也不触发真实校园认证。已有的旧预览安装包仅保留为历史本地产物，不作为当前验收入口。
+详细结果和失败历史见[验证记录](docs/VALIDATION-LOG.md)。
 
-要查看当前窗口，在仓库目录运行 `powershell -File scripts/open-demo.ps1`。它从已构建的 DLL 打开**演示模式**，显示模拟状态，不连接后台或校园网；若提示缺少构建文件，先运行上面的 `check-dev.ps1`。窗口能打开只证明界面可启动，不代表自动认证已经可用。
+## 反馈
 
-公开源码仓库：[aaamqrx/CampusPulse](https://github.com/aaamqrx/CampusPulse)。[预发布版](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.1) 在 10-01 完成上述范围的安装与系统检查；10-03 自动恢复验收失败。公开附件在发布时重新下载并与本机实测包逐字节校验一致。稳定版及完整 M5 尚未完成。
+[提交问题](https://github.com/aaamqrx/CampusPulse/issues)。请提供软件版本、Windows 版本、场景和实际结果；可点击“复制事件”附上脱敏记录。请勿上传账号密码、完整抓包或带认证参数的地址。
 
-`.local/`、`.tools/`、`artifacts/`、实际凭据和本机日志不提交。每次推送前检查暂存内容和提交历史，不能仅依赖忽略规则。
+## 开发
 
-## 许可证与参考
+使用 C#、.NET 10、WPF、Windows Service 和 Inno Setup；SDK 固定为 `10.0.203`。
 
-采用 [MIT License](LICENSE)。本项目独立实现，[Campus-Flow](https://github.com/zuijiu888/Campus-Flow) 用于理解类似功能需求，不代表已复用其实现或通过其兼容性测试。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-static.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-dev.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+```
+
+普通提交与 PR 自动检查；预览标签从干净源码构建安装包和清单，仅创建草稿，经最终包验收后公开。离线控制台检查不安装服务或提交校园认证。
+
+接手先读[交接指南](docs/HANDOFF.md)，行为见[开发设计](docs/DEVELOPMENT.md)，验收见[测试与发布计划](docs/TESTING-AND-RELEASE.md)。演示窗口入口为 `scripts/open-demo.ps1`，显示模拟状态。
+
+`.local/`、`.tools/`、`artifacts/`、凭据与本机日志不提交。图标为原创矢量标记，可用 `scripts/generate-icon.py` 和 Pillow 重新生成。
+
+## 许可证
+
+[MIT License](LICENSE)。独立实现；[Campus-Flow](https://github.com/zuijiu888/Campus-Flow) 为功能参考，不作为兼容性或实测证明。

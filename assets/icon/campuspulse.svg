@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">CampusPulse</title>
+  <desc id="desc">White network pulse between two connected nodes on a teal rounded square.</desc>
+  <defs><linearGradient id="teal" x2="0" y2="1"><stop stop-color="#208d9e"/><stop offset="1" stop-color="#155565"/></linearGradient></defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#teal)"/>
+  <polyline points="48,128 88,128 102,108 124,164 149,88 173,128 208,128" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="48" cy="128" r="12" fill="white"/><circle cx="208" cy="128" r="12" fill="white"/>
+</svg>

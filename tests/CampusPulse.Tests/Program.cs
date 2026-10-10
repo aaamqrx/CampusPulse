@@ -52,6 +52,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("NET-05 network change bursts keep the retry interval", NetworkEventBurstKeepsInterval),
     ("NET-05 retry delay remains bounded", RetryBounds)
 };
+tests = tests.Concat(UpdateChecks.All).ToArray();
 string? filter = args.Length == 1 && args[0].StartsWith("--filter=", StringComparison.Ordinal)
     ? args[0]["--filter=".Length..] : null;
 if (args.Length > 0 && string.IsNullOrWhiteSpace(filter))

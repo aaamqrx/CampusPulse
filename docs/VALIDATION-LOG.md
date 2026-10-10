@@ -315,6 +315,22 @@
 - **安全替代验证：通过有限范围**：PowerShell 解析通过；从修改后的真实源码 AST 提取并执行安装注册路径选择分支（不含提权或管道调用），实际匹配 `E:\Apps\CampusPulse\Service\CampusPulse.Service.exe`，退出码 0。证据 `inspect-custom-target.json`。这不是完整管理员只读检查通过；前述独立最终系统复核和安装结果不受此取消影响。
 - **发布边界**：发布后提交仅含交接/验收文档及此只读工具；没有改应用或服务二进制。最终包和标签仍来自 `58bc8f03ba97d22a9089e918ebb0cce62f4f20ea`。Git main 后续提交单独推送回读，旧/新发布标签和已公开附件保持不变。
 
+## 2026-10-10 preview.3 本地开发检查与原生演示
+
+- **版本/来源**：`0.1.0-preview.3` 未提交候选，基于 main `53e418e5eb86f7d61f2940424284fadf2e391c60`。用户明确授权原位升级、本机验收和公开预发布；保留旧标签/附件。
+- **构建执行失败及修正**：首次脚本因本机执行策略拒绝，改为单进程 `-ExecutionPolicy Bypass`，未修改系统策略。受限网络执行出现 NU1900，且测试项目构建非零退出，未记通过；使用正常网络权限后四项目 0 警告/错误、55/55 通过。后续限流边界复查的 UPDATE-08 因 HTTP 库拒绝 `TimeSpan.MaxValue` 模拟值失败，改用库接受的最大秒数，验证生产代码的一天上限；失败不涉及系统安装或认证。
+- **最终离线复查：通过**。`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-dev.ps1`，SDK `10.0.203`，四项目 Release 0 警告/错误，55/55 离线检查、退出码 0。新增 12 项覆盖数字排序、预览/稳定选择、草稿/非法/未公开过滤、空列表、分页、HTTP/网络/JSON/重定向失败、限流及上限、超时、取消和固定浏览器目标。证据 `.local/preview3/dev-check-20261010.txt`、`dev-check-result.json`；不是校园实测或安装验收。
+- **原生演示：通过有限范围**。真实 WPF 演示进程 9/9 核对：版本、更新控件、模拟查看入口、原生窗口图标句柄、响应与 EXE 图标。人工回看截图，更新区域文字/按钮无截断；仅结束本轮创建的演示进程。证据 `.local/preview3/native-demo-result.json`、`native-demo.png`、`native-exe-icon.png`。演示不发送 HTTP、不打开真实浏览器、不调用后台，正式升级后另查界面。
+- **图标：通过**。原创 SVG、1024 PNG 与 ICO 七尺寸 16/24/32/48/64/128/256 已生成，逐帧存在检查及深浅背景缩略图人工辨识度回看通过。证据 `.local/preview3/icon-review.png`；托盘、快捷方式和安装包最终载荷另验。
+- **文档与工具检查：通过有限范围**。README 按用户入口重写，同步交接、开发与验收；当前下载保留已实际公开的 preview.2。`scripts/check-static.ps1` 的版本一致、PowerShell 解析、本地 Markdown 链接/围栏和图标检查通过；`git diff --check` 退出码 0。新增原位升级工具仅完成解析，尚未运行。
+- **远端与系统状态**：回读公开仓库 main 与本地基线一致；本机固定 AppId 注册 preview.2、目录 `E:\Apps\CampusPulse`、精确服务路径一致。标签 Actions、草稿附件、升级、最终包、公开新版及匿名下载仍未执行。此前认证/一晚跨夜/生命周期继续引用原记录，其他电脑/运营商/干净 Windows 仍未验证。
+
+## 2026-10-10 preview.3 候选打包与上传前检查
+
+- **本地候选打包：通过**。`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1` 退出码 0，四项目构建、55/55 离线检查、App/Service 自包含发布及 Inno Setup 6.7.3 编译通过，图标写入成功。证据 `artifacts/0.1.0-preview.3/logs/build-20261010-134000-872.log`、候选清单。此候选 sourceDirty=true，未安装、不会作为最终公开附件；最终验收只使用后续标签 Actions 的同一文件。
+- **源文件与安装载荷：通过有限范围**。27 个实际变更/新增文件显式清单核对，忽略目录/本机数据/日志排除、已知 GitHub token/私钥模式及差异检查通过；不是全面秘密审计。发布目录检查拒绝设置、凭据、事件、私钥及日志文件，清单记录全部 App/Service 文件摘要。证据 `.local/preview3/source-review.json`。旧 preview.2 本地安装包哈希仍与原记录一致。
+- **旧版远端基线：已回读**。旧两版 Release 和四附件的 id/大小/digest 记录于 `.local/preview3/old-releases-before.json`；远端旧 annotated tags 保持 preview.1 `e313b50d1477f9af611c14296c2b92db69ab22c4`、preview.2 `7fe05b883a652813f5e464733f6303652d5dcd4a`。首次只读旧版筛选因 Windows PowerShell 数组展开得到空列表，修正后回读成功，未修改任何 Release。
+
 ## 后续记录格式
 
 每条记录包含：日期、软件版本/提交标识（若尚未建立则注明）、测试编号、执行环境、操作或命令、预期结果、实际结果、通过/失败/未执行、脱敏证据位置及验证限制。

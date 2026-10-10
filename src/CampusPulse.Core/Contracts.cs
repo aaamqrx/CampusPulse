@@ -66,5 +66,5 @@ public static class ProductInfo
 {
     public const string ServiceName = "CampusPulse";
     public const string PipeName = "CampusPulse.Control.v1";
-    public const string Version = "0.1.0-preview.2";
+    public const string Version = "0.1.0-preview.3";
 }

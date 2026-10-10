@@ -1,17 +1,28 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(?:-preview\.\d+)?$')]
-    [string]$Version = '0.1.0-preview.2',
+    [string]$Version,
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
     [string]$DotNetPath,
     [string]$InnoCompilerPath,
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$RequireCleanTag
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$productSource = Get-Content -LiteralPath (Join-Path $repoRoot 'src\CampusPulse.Core\Contracts.cs') -Raw
+$productVersion = [regex]::Match($productSource, 'public const string Version = "([^"]+)";').Groups[1].Value
+if (-not $Version) { $Version = $productVersion }
+if ($productVersion -ne $Version) { throw 'Build version must match ProductInfo.Version in the source.' }
+if ($RequireCleanTag) {
+    $changes = @(& git -c "safe.directory=$repoRoot" -C $repoRoot status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $changes.Count) { throw 'Release builds require a clean Git worktree.' }
+    $tags = @(& git -c "safe.directory=$repoRoot" -C $repoRoot tag --points-at HEAD)
+    if ($LASTEXITCODE -ne 0 -or $tags -notcontains "v$Version") { throw 'Release builds require the matching tag at HEAD.' }
+}
 $artifactsRoot = Join-Path (Join-Path $repoRoot 'artifacts') $Version
 $installerRoot = Join-Path $artifactsRoot 'installer'
 $installer = Join-Path $installerRoot "CampusPulse-Setup-$Version.exe"
@@ -82,9 +93,6 @@ function Assert-PublishPayload {
 }
 
 # Reject the wrong version before entering artifact cleanup, including its failure cleanup.
-$productSource = Get-Content -LiteralPath (Join-Path $repoRoot 'src\CampusPulse.Core\Contracts.cs') -Raw
-$productVersion = [regex]::Match($productSource, 'public const string Version = "([^"]+)";').Groups[1].Value
-if ($productVersion -ne $Version) { throw 'Build version must match ProductInfo.Version in the source.' }
 Push-Location $repoRoot
 try {
     # Invalidate old success artifacts before checking tools or source files.
@@ -167,6 +175,16 @@ try {
         $sourceTags = @(& git -c "safe.directory=$repoRoot" tag --points-at HEAD)
         if ($LASTEXITCODE -ne 0) { throw 'Cannot record the build source tags.' }
     }
+    $payloadFiles = @(foreach ($component in @('App', 'Service')) {
+        $componentRoot = Join-Path $artifactsRoot "publish\$component"
+        foreach ($file in Get-ChildItem -LiteralPath $componentRoot -File -Recurse | Sort-Object FullName) {
+            [ordered]@{
+                path = $component + '/' + $file.FullName.Substring($componentRoot.Length + 1).Replace('\', '/')
+                length = $file.Length
+                sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+    })
     $manifest = [ordered]@{
         sourceCommit = $sourceCommit; sourceDirty = $sourceDirty; sourceTags = $sourceTags
         version = $Version; sdk = $sdkVersion; completedUtc = [DateTime]::UtcNow.ToString('O')
@@ -174,9 +192,10 @@ try {
         offlineTestsPassed = $true; installerBuilt = -not [bool]$SkipInstaller
         installer = if ($SkipInstaller) { $null } else { [IO.Path]::GetFileName($installer) }
         sha256 = if ($SkipInstaller) { $null } else { $checksum }
+        payloadFiles = $payloadFiles
         installerExecuted = $false; realAuthenticationTested = $false
     }
-    $manifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     Write-Host "Build, offline tests and self-contained publish completed. Evidence: $script:buildLog"
     if (-not $SkipInstaller) { Write-Host "Created installer: $installer" }
     Write-Host 'No product installer was run. Installation, real authentication and overnight recovery remain unverified.'

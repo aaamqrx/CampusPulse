@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0-preview.2"
+  #define AppVersion "0.1.0-preview.3"
 #endif
 #ifndef PublishRoot
   #define PublishRoot "..\artifacts\" + AppVersion + "\publish"
@@ -8,11 +8,15 @@
   #define InstallerOutputRoot "..\artifacts\" + AppVersion + "\installer"
 #endif
 #define AppName "CampusPulse"
+#ifndef AppNumericVersion
+  #define AppNumericVersion "0.1.0.0"
+#endif
 
 [Setup]
 AppId={{DB15D4E6-9CD2-47E0-A4EF-1529703B831A}
 AppName={#AppName}
 AppVersion={#AppVersion}
+VersionInfoVersion={#AppNumericVersion}
 AppPublisher=CampusPulse contributors
 DefaultDirName={autopf}\CampusPulse
 DefaultGroupName=CampusPulse
@@ -29,6 +33,7 @@ OutputBaseFilename=CampusPulse-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\assets\icon\campuspulse.ico
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\App\CampusPulse.App.exe

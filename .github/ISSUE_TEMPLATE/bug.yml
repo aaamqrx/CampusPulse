@@ -1,0 +1,22 @@
+name: Problem report
+description: Report a CampusPulse problem using sanitized information only.
+body:
+  - type: markdown
+    attributes:
+      value: "请勿填写校园账号、密码、认证请求、完整抓包或其他凭据。可使用界面的“复制事件”提供脱敏记录。"
+  - type: input
+    id: version
+    attributes:
+      label: 软件版本与 Windows 版本
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 场景、预期结果和实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 脱敏事件（可选）
