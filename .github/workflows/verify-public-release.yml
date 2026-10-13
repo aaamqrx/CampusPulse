@@ -1,9 +1,9 @@
-name: Verify public preview delivery
+name: Verify public release delivery
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Published preview version without v
+        description: Published stable or preview version without v
         required: true
       expected_commit:
         description: Accepted tag source commit
@@ -33,13 +33,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+-preview\.\d+$' -or $env:EXPECTED_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:EXPECTED_SHA256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid accepted delivery inputs.' }
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+(?:-preview\.\d+)?$' -or $env:EXPECTED_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:EXPECTED_SHA256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid accepted delivery inputs.' }
           $tag = 'v' + $env:VERSION
           $source = git rev-parse "$tag^{}"
           if ($LASTEXITCODE -ne 0 -or $source -ne $env:EXPECTED_COMMIT) { throw 'Published tag changed.' }
           # No Authorization header: this must work as an ordinary public download.
           $release = Invoke-RestMethod "https://api.github.com/repos/aaamqrx/CampusPulse/releases/tags/$tag" -Headers @{'User-Agent'='CampusPulse-Public-Verification'}
-          if ($release.draft -or -not $release.prerelease -or $release.assets.Count -ne 3) { throw 'Expected public preview and three assets.' }
+          $expectedPreview = $env:VERSION.Contains('-preview.')
+          if ($release.tag_name -ne $tag -or $release.draft -or $release.prerelease -ne $expectedPreview -or $release.assets.Count -ne 3) { throw 'Expected public release in matching channel and three assets.' }
           $root = "public/$env:VERSION"
           New-Item -ItemType Directory -Path "$root/installer" -Force | Out-Null
           $files = @()

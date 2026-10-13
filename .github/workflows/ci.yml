@@ -25,5 +25,7 @@ jobs:
           global-json-file: global.json
       - name: Validate repository and documents
         run: ./scripts/check-static.ps1
+      - name: Check stable and preview release provenance validation
+        run: ./scripts/test-release-verification.ps1
       - name: Build four projects and run offline console checks
         run: ./scripts/check-dev.ps1

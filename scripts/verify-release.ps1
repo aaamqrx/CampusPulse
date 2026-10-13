@@ -1,11 +1,12 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+-preview\.\d+$')][string]$Version,
-    [Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$ExpectedCommit)
+param([Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+(?:-preview\.\d+)?$')][string]$Version,
+    [Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$ExpectedCommit,
+    [switch]$AllowUntaggedCandidate)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $manifest = Get-Content -LiteralPath (Join-Path $Root 'build-manifest.json') -Raw | ConvertFrom-Json
 if ($manifest.version -ne $Version -or $manifest.sourceCommit -ne $ExpectedCommit -or $manifest.sourceDirty -ne $false -or
-    $manifest.sourceTags -notcontains "v$Version" -or $manifest.offlineTestsPassed -ne $true -or $manifest.installerBuilt -ne $true -or
+    (-not $AllowUntaggedCandidate -and $manifest.sourceTags -notcontains "v$Version") -or $manifest.offlineTestsPassed -ne $true -or $manifest.installerBuilt -ne $true -or
     $manifest.sdk -ne '10.0.203' -or @($manifest.payloadFiles).Count -lt 2) { throw 'Release provenance mismatch.' }
 $exe = Join-Path $Root "installer\CampusPulse-Setup-$Version.exe"
 $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -18,4 +19,5 @@ foreach ($file in $manifest.payloadFiles) {
         $file.sha256 -notmatch '^[a-f0-9]{64}$' -or $file.length -le 0 -or $names.ContainsKey($file.path)) { throw 'Invalid payload inventory.' }
     $names[$file.path] = $true
 }
-Write-Host 'Clean tag provenance, installer hash and payload inventory verified. No installation or authentication was performed.'
+$sourceKind = if ($AllowUntaggedCandidate) { 'Unpublished clean-source candidate' } else { 'Clean tag' }
+Write-Host "$sourceKind provenance, installer hash and payload inventory verified. No installation or authentication was performed."

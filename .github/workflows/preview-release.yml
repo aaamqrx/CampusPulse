@@ -1,11 +1,12 @@
-name: Build preview draft
+name: Build verified release draft
 on:
+  workflow_dispatch:
   push:
-    tags: ['v*-preview.*']
+    tags: ['v*']
 permissions:
   contents: read
 concurrency:
-  group: preview-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
@@ -22,10 +23,11 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           global-json-file: global.json
-      - name: Validate preview tag
+      - name: Validate release tag
         run: |
-          if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+-preview\.\d+$') { throw 'Invalid preview tag.' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+(?:-preview\.\d+)?$') { throw 'Invalid release tag.' }
           ./scripts/check-static.ps1
+          ./scripts/test-release-verification.ps1
       - name: Install verified Inno Setup 6.7.3 in runner temporary directory
         run: |
           $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
@@ -38,12 +40,13 @@ jobs:
           "INNO_COMPILER=$compilerRoot\ISCC.exe" >> $env:GITHUB_ENV
       - name: Build exact clean tag and verify delivery files
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          ./scripts/build.ps1 -Version $version -InnoCompilerPath $env:INNO_COMPILER -RequireCleanTag
-          ./scripts/verify-release.ps1 -Version $version -Root "artifacts/$version" -ExpectedCommit $env:GITHUB_SHA
+          $tagged = $env:GITHUB_REF_TYPE -eq 'tag'
+          $version = if ($tagged) { $env:GITHUB_REF_NAME.Substring(1) } else { [regex]::Match((Get-Content src/CampusPulse.Core/Contracts.cs -Raw), 'public const string Version = "([^"]+)";').Groups[1].Value }
+          ./scripts/build.ps1 -Version $version -InnoCompilerPath $env:INNO_COMPILER -RequireCleanTag:$tagged
+          ./scripts/verify-release.ps1 -Version $version -Root "artifacts/$version" -ExpectedCommit $env:GITHUB_SHA -AllowUntaggedCandidate:(-not $tagged)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: preview-delivery
+          name: release-delivery
           path: |
             artifacts/*/installer/*.exe
             artifacts/*/installer/sha256.txt
@@ -57,8 +60,36 @@ jobs:
           path: artifacts/*/logs/*.log
           if-no-files-found: ignore
           retention-days: 14
-  draft:
+  installation:
     needs: build
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-delivery
+          path: delivery
+      - name: Validate same installer on a disposable Windows runner
+        run: |
+          $tagged = $env:GITHUB_REF_TYPE -eq 'tag'
+          $version = if ($tagged) { $env:GITHUB_REF_NAME.Substring(1) } else { [regex]::Match((Get-Content src/CampusPulse.Core/Contracts.cs -Raw), 'public const string Version = "([^"]+)";').Groups[1].Value }
+          ./scripts/validate-clean-install.ps1 -Version $version -DeliveryRoot "delivery/$version" -ExpectedCommit $env:GITHUB_SHA -AllowUntaggedCandidate:(-not $tagged)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: installation-evidence
+          path: artifacts/installation-evidence/*
+          if-no-files-found: error
+          retention-days: 30
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, installation]
     runs-on: windows-2022
     timeout-minutes: 10
     permissions:
@@ -72,9 +103,9 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          name: preview-delivery
+          name: release-delivery
           path: delivery
-      - name: Create immutable draft prerelease
+      - name: Create immutable draft in the matching release channel
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -86,5 +117,6 @@ jobs:
           if ($existing) { throw 'Release already exists; do not replace its attachments.' }
           $root = "delivery/$version"
           $files = @("$root/installer/CampusPulse-Setup-$version.exe", "$root/installer/sha256.txt", "$root/build-manifest.json")
-          gh release create $env:GITHUB_REF_NAME @files --verify-tag --draft --prerelease --title "CampusPulse $version" --notes-file "docs/releases/$version.md"
+          $channel = if ($version.Contains('-preview.')) { @('--prerelease') } else { @() }
+          gh release create $env:GITHUB_REF_NAME @files --verify-tag --draft @channel --title "CampusPulse $version" --notes-file "docs/releases/$version.md"
           if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed.' }
