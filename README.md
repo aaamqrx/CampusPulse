@@ -6,13 +6,13 @@
 
 ## 下载
 
-当前已发布版本：[v0.1.0-preview.3](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0-preview.3)。
+当前正式版：[v0.1.0](https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0)。
 
-[下载安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/CampusPulse-Setup-0.1.0-preview.3.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/sha256.txt) · [构建清单](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0-preview.3/build-manifest.json)
+[下载安装包](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0/CampusPulse-Setup-0.1.0.exe) · [SHA-256 校验文件](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0/sha256.txt) · [构建清单](https://github.com/aaamqrx/CampusPulse/releases/download/v0.1.0/build-manifest.json)
 
-安装包包含运行环境，需要管理员权限，目前未签名。preview.3 安装包 SHA-256：`0d17c33d3374407cc5f631eb3f23ff616d2828895f2a31aaa4e8f0674f754142`。
+安装包包含运行环境，需要管理员权限，目前未签名。0.1.0 安装包 SHA-256：`8796f43c98791701c21f3cf72d029d5471ad89d3634bd8fe2ed46a0d662c23da`。
 
-**preview.3 已发布**：新增软件更新提醒、统一图标、GitHub 自动构建检查与标签草稿打包。四项目构建、55 项离线检查、普通及标签 Actions、本机原位升级和公开三附件下载核对通过，详细结果见[验证记录](docs/VALIDATION-LOG.md)。
+**首个正式版已发布**：四项目构建、55 项离线检查、13 项发布来源校验、隔离 Windows 安装生命周期 2187/2187 检查及公开三附件匿名下载核对通过。连续稳定使用由用户确认，详细证据和边界见[验证记录](docs/VALIDATION-LOG.md)。
 
 ## 首次使用
 
@@ -44,9 +44,9 @@
 
 - Windows 11 x64、有线网、与当前学校相同的 Dr.COM 页面和接口配置。支持运营商选择和校内 HTTP IPv4 门户首页输入。
 - 本校电信完成过真实手动认证及公网复查；修复后台已有自然自动恢复证据，用户于 2026-10-13 再次确认连续使用稳定、基本没有问题。具体夜数不作推定。
-- preview.2 的本机安装生命周期已有记录；preview.3 的原位升级、原生更新区域与图标、最终包及公开下载均按本轮证据独立验收。
+- 0.1.0 最终包在一次性 Windows Server 2025 完成安装、重装、preview.3 升级、卸载、重新安装和同名服务拒绝，2187/2187 检查通过；此环境与干净 Windows 11 分别记录。
 - 其他符合当前适配模板的 Dr.COM 校园网可以尝试；程序在提交凭据前核对页面、脚本和所选运营商参数。登录页相似不代表协议一致，其他学校/运营商尚未实测。
-- `0.1.0` 首个正式版正在验收；尚未公开时，上方下载继续指向已发布的 preview.3。干净 Windows 11、其他电脑/DPI、卸载后重启及完整安装故障矩阵仍按未验证披露。
+- 干净 Windows 11、其他电脑/DPI、卸载后真实重启及完整安装故障矩阵尚未全面验证。本轮未改动既有本机安装；公开正式版不等于已替现有用户安装升级。
 
 详细结果和失败历史见[验证记录](docs/VALIDATION-LOG.md)。
 

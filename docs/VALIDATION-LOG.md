@@ -382,3 +382,13 @@
 - **用户最新边界**：本机当前能用，不要改动；仅完成发布相关工作并上传 GitHub。因此本轮取消本机原位升级计划，不安装/卸载、不停止或重启现有服务、不变更设置。安装验收仅在一次性云端 runner，当前产品继续 preview.3。
 
 - **本地开发检查**：沙箱首次构建在 Tests 阶段异常退出；沙箱外重试四项目构建及 55/55 离线检查通过，退出码 0。存在 NU1900 漏洞数据源不可达警告，不记为零警告或漏洞扫描通过。证据：.local/stable/dev-check.txt 与 dev-check-retry.txt。新增发布来源校验覆盖稳定/预览、错误提交/标签/摘要、越界路径、重复载荷、无标签候选与脏源码；候选分支手动构建只做隔离验收，不创建 Release。静态检查通过。
+
+## 2026-10-13 v0.1.0 正式版构建、隔离安装与公开交付
+
+- **源码/远端**：提交 `0a97305b33956ac72c1cd406971691423ea54b12`，普通 Actions `38353078960` success；回读日志四项目 0 Warning(s)/0 Error(s)，55/55 离线及 13/13 来源检查通过。候选 Actions `38353083056` success，仅验收、不创建发布；Windows Server 2025 候选 2187/2187。证据 `.local/stable/run-38353078960.log`、`candidate-evidence/installation.json`。
+- **正式标签及同包**：annotated tag `v0.1.0` 对象 `1895818127875a6507b8c88a5eb24aa02874a4e7`，peeled commit `0a97305b33956ac72c1cd406971691423ea54b12`。Actions `38353484040` 的 build/installation/draft 均 success，从干净标签重新构建，不复用未打标签候选。SDK 10.0.203、Inno 6.7.3，697 个载荷条目。安装包 79,313,741 字节，SHA-256 `8796f43c98791701c21f3cf72d029d5471ad89d3634bd8fe2ed46a0d662c23da`。证据 `.local/stable/ci/0.1.0/`、`run-38353484040.json/.log`。
+- **安装生命周期/原生运行**：同一最终安装包在 Microsoft Windows Server 2025 Datacenter build 26100，2187/2187 检查，Failure=null。实测安装/同版重装/服务重启/Unicode 路径/preview.3 升级/Manual 与停止状态及假凭据密文保留/卸载与重装/外来同名服务拒绝；WPF 演示和后台运行，coreclr.dll 来自随包目录。未移除 runner 预装共享运行时，不声称无 .NET 的干净 Windows 11 实测。假账号自动认证关闭，无实际提交摘要。证据 `.local/stable/installation-evidence/installation.json` 及逐步安装日志。
+- **GitHub 公开与下载**：Release `411329933`，draft=false、prerelease=false、Latest=v0.1.0，三个附件与 Actions 原件摘要及大小一致。独立 Windows runner 匿名完整下载三附件，源提交/清单/安装包 SHA 匹配，failure=null。旧三个预览 Release 及附件 id/name/size/digest 回读不变。证据 `.local/stable/release-readback.json`、`public-evidence/public-verification.json`、`old-releases-before.json`。实际公开页面 `https://github.com/aaamqrx/CampusPulse/releases/tag/v0.1.0`。
+- **本机及校园边界**：本机原 preview.3 没有安装/卸载、服务重启、设置/凭据/电源改动或新建私有备份。未新增真实认证、跨夜或卸载后重启；连续稳定性采用用户 2026-10-13 现场确认，未推定夜数。干净 Windows 11、其他电脑/DPI/学校运营商及完整安装失败组合仍未全面验证；包未签名。最终文档另行提交与推送，标签和附件不变。
+
+- **公开下载运行**：Actions 38353978602 success，13:56:36 +08:00 的报告核对三文件完整大小/摘要及源标签。一次旧附件比较因 Windows PowerShell 把数组序列化为 value/Count 包装而误判失败；保留前后元数据，修正读取逻辑后七个旧附件的 id/name/size/digest 全部一致，未改动旧附件。证据 old-releases-before.json、old-releases-after.json。最终只读注册项确认本机仍为 preview.3、原 E 盘目录。
